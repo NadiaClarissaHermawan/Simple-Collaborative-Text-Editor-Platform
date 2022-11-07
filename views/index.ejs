@@ -1,0 +1,29 @@
+<header>
+    <div class="p-3 container-fluid bg-warning bg-gradient">
+        <h1 class="fs-4 fw-bolder">
+            Collaborative Text Editor
+            <span class="badge bg-secondary">on progress</span>
+        </h1>
+    </div>
+</header>
+<section>
+    <div class="d-flex flex-column mt-3 w-100 align-items-center">
+        <button type="button" class="btn btn-lg btn-outline-dark w-50 mb-2">Create Room</button>
+        <div class="input-group w-50">
+            <input type="text" class="form-control" placeholder="Room's code"/>
+            <button type="button" class="btn btn-lg btn-outline-dark">Join Room</button>
+        </div>
+    </div>
+</section>
+<footer>
+
+</footer>
+
+<script>
+    let ws = new WebSocket('ws://localhost:8081');
+    ws.onmessage = message => {
+        const resp = JSON.parse(message.data);
+        console.log(resp);
+    };
+</script>
+    
