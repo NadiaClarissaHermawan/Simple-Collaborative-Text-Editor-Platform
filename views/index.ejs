@@ -21,8 +21,10 @@
     const roomCode = document.getElementById('roomCode');
     const clientCounter = document.getElementById('clientCounter');
 
-    //connect to server & get user id
+    //connect to server
     let ws = new WebSocket('ws://localhost:8081');
+
+    //declare attr
     let clientId = null;
     let roomId = null;
 
@@ -46,26 +48,28 @@
             clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
             roomCode.classList.remove('none');
             clientCounter.classList.remove('none');
+        //someone disconnected
+        } else if (resp.method === 'disconnect') {
+            clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
+            console.log('client id ' + resp.clientId + ' has disconnected.');
         }
     };
 
-    //TODO:benerin
-    // ws.onclose = (event) => {
-    //     const payLoad = {
-    //         'method': 'cl',
-    //         'clientId': clientId,
-    //         'roomId' : roomId
-    //     };
-    //     ws.send(JSON.stringify(payLoad));
-    // };
-
     //create room button listeners
     btnCreate.addEventListener('click', e => {
+        if (roomId !== null) {
+            const payLoad = {
+                'method': 'move',
+                'clientId': clientId,
+                'roomId': roomId
+            };
+            ws.send(JSON.stringify(payLoad));
+        }
+        
         const payLoad = {
             'method': 'create',
             'clientId': clientId
         };
-
         ws.send(JSON.stringify(payLoad));
     });
 
@@ -73,8 +77,9 @@
     btnJoin.addEventListener('click', e => {
         //not room creator
         if (roomId === null) {
-            roomId = inputGameId.value;
-        }
+            roomId = inputGameId.value.trim();
+        } 
+        
         const payLoad = {
             'method': 'join',
             'clientId': clientId,
