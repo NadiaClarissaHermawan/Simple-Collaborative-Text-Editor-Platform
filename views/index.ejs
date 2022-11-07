@@ -1,29 +1,86 @@
-<header>
-    <div class="p-3 container-fluid bg-warning bg-gradient">
-        <h1 class="fs-4 fw-bolder">
-            Collaborative Text Editor
-            <span class="badge bg-secondary">on progress</span>
-        </h1>
-    </div>
-</header>
 <section>
-    <div class="d-flex flex-column mt-3 w-100 align-items-center">
-        <button type="button" class="btn btn-lg btn-outline-dark w-50 mb-2">Create Room</button>
-        <div class="input-group w-50">
-            <input type="text" class="form-control" placeholder="Room's code"/>
-            <button type="button" class="btn btn-lg btn-outline-dark">Join Room</button>
+    <div id="contentContainer" class="d-flex flex-column mt-3 w-100 align-items-center">
+        <button id="btnCreate" type="button" class="btn btn-lg btn-outline-dark w-50 mb-2">Create Room</button>
+        <div class="input-group w-50 mb-2">
+            <input id="roomId" type="text" class="form-control" placeholder="Room's code"/>
+            <button id="btnJoin" type="button" class="btn btn-lg btn-outline-dark">Join Room</button>
+        </div>
+
+        <div class="d-flex flex-column text-start">
+            <span id="roomCode" class="none"></span>
+            <span id="clientCounter" class="none"></span> 
         </div>
     </div>
 </section>
-<footer>
-
-</footer>
 
 <script>
+    //html elements
+    const btnCreate = document.getElementById('btnCreate');
+    const btnJoin = document.getElementById('btnJoin');
+    const inputGameId = document.getElementById('roomId');
+    const roomCode = document.getElementById('roomCode');
+    const clientCounter = document.getElementById('clientCounter');
+
+    //connect to server & get user id
     let ws = new WebSocket('ws://localhost:8081');
+    let clientId = null;
+    let roomId = null;
+
+    //client ws message listener
     ws.onmessage = message => {
         const resp = JSON.parse(message.data);
-        console.log(resp);
+
+        //connect
+        if (resp.method === 'connect') {
+            clientId = resp.clientId;
+            console.log('client id set successfully ' + clientId);
+        //create
+        } else if (resp.method === 'create') {
+            roomId = resp.room.roomId;
+            console.log('room successfully created with id ' + resp.room.roomId);
+            btnJoin.click();
+        //join
+        } else if (resp.method === 'join') {
+            console.log('client joined successfully');
+            roomCode.textContent = 'Room id : ' + roomId;
+            clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
+            roomCode.classList.remove('none');
+            clientCounter.classList.remove('none');
+        }
     };
+
+    //TODO:benerin
+    // ws.onclose = (event) => {
+    //     const payLoad = {
+    //         'method': 'cl',
+    //         'clientId': clientId,
+    //         'roomId' : roomId
+    //     };
+    //     ws.send(JSON.stringify(payLoad));
+    // };
+
+    //create room button listeners
+    btnCreate.addEventListener('click', e => {
+        const payLoad = {
+            'method': 'create',
+            'clientId': clientId
+        };
+
+        ws.send(JSON.stringify(payLoad));
+    });
+
+    //join room button listeners
+    btnJoin.addEventListener('click', e => {
+        //not room creator
+        if (roomId === null) {
+            roomId = inputGameId.value;
+        }
+        const payLoad = {
+            'method': 'join',
+            'clientId': clientId,
+            'roomId' : roomId
+        };
+        ws.send(JSON.stringify(payLoad));
+    });
 </script>
     

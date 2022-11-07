@@ -7,8 +7,15 @@ router.get('/', (req, res) => {
     
     //pemanggilan view bernama index pada folder views dengan ejs
     res.render('index', {
-        layout: 'layouts/main',
-        title: 'main page'
+        layout : 'layouts/main',
+        title : 'main page'
+    });
+});
+
+router.get('/texteditor', (req, res) => {
+    res.render('texteditor', {
+       layout : 'layouts/main',
+       title : 'text editor'  
     });
 });
 

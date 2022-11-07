@@ -12,7 +12,15 @@
         <link href="/styles.css" rel="stylesheet" type="text/css"/>
     </head>
     <body>
-        <%- include('nav') %>
+        <header>
+            <div class="p-3 container-fluid bg-warning bg-gradient">
+                <h1 class="fs-4 fw-bolder">
+                    Collaborative Text Editor
+                    <span class="badge bg-secondary">on progress</span>
+                </h1>
+            </div>
+            <%- include('nav') %>
+        </header>
         
         <!-- content here -->
         <div class="container-fluid p-0">

@@ -24,7 +24,7 @@ app.use(express.static('public'));
 const router = require('./routes/route');
 app.use(router);
 
-//---------------------------------------------------------
+//--------------------------------------------------------------------
 //create http server
 const http = require('http');
 const { connect } = require('http2');
@@ -45,33 +45,79 @@ const wsServer = new websocketServer({
 //use unique id generator
 const { v4 : uuidv4 } = require('uuid');
 const { client } = require('websocket');
+const { resourceLimits } = require('worker_threads');
 
-//hashmap of clients connected
+//hashmap of clients connected & rooms available
 const clients = {};
+const rooms = {};
 
 //client request to connect
 wsServer.on('request', request => {
     const connection = request.accept(null, request.origin);
-    //when connected do..
+    
+    //when client connected do..
     connection.on('open', () => console.log('connection opened!'));
-    //when disconnected do..
-    connection.on('close', () => console.log('connection closed!'));
+    
+    //when client disconnected do..
+    connection.on('close', () => {
+        console.log('connection closed !');
+    });
+    
     //when server received message from client, do..
     connection.on('message', (message) => {
         const resp = JSON.parse(message.utf8Data);
         console.log(resp);
+
+        //server: create room request listener
+        if (resp.method === 'create') {
+            const clientId = resp.clientId;
+            const roomId = uuidv4();
+            //TODO: write room's last state 
+            rooms[roomId] = {
+                'roomId' : roomId,
+                'clients' : []
+            }
+
+            const payload = {
+                'method' : 'create',
+                'room' : rooms[roomId]
+            }
+
+            const con = clients[clientId].connection;
+            con.send(JSON.stringify(payload));
+
+        //server: join room request listener
+        } else if (resp.method === 'join') {
+            const clientId = resp.clientId;
+            const roomId = resp.roomId;
+            const room = rooms[roomId];
+            
+            room.clients.push({
+                'clientId' : clientId
+            });
+
+            const payLoad = {
+                'method' : 'join',
+                'room' : room
+            }
+
+            //send room state through all clients
+            room.clients.forEach(element => {
+                clients[element.clientId].connection.send(JSON.stringify(payLoad));
+            });
+        }
     });
 
     //generate unique client id & store the connection
-    const cuid = uuidv4();
-    clients[cuid] = {
+    const clientId = uuidv4();
+    clients[clientId] = {
         'connection' : connection
     };
 
     //send connect response back to client
     const payload = {
         'method' : 'connect',
-        'clientId' : cuid
+        'clientId' : clientId
     };
     connection.send(JSON.stringify(payload));
 });
