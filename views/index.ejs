@@ -26,7 +26,10 @@
 
     //declare attr
     let clientId = null;
-    let roomId = null;
+    let roomId = {
+        'id' : null,
+        'creator' : -1 //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
+    };
 
     //client ws message listener
     ws.onmessage = message => {
@@ -38,13 +41,16 @@
             console.log('client id set successfully ' + clientId);
         //create
         } else if (resp.method === 'create') {
-            roomId = resp.room.roomId;
+            roomId = {
+                'id' : resp.room.roomId,
+                'creator' : 1
+            };
             console.log('room successfully created with id ' + resp.room.roomId);
             btnJoin.click();
         //join
         } else if (resp.method === 'join') {
             console.log('client joined successfully');
-            roomCode.textContent = 'Room id : ' + roomId;
+            roomCode.textContent = 'Room id : ' + roomId.id;
             clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
             roomCode.classList.remove('none');
             clientCounter.classList.remove('none');
@@ -57,11 +63,11 @@
 
     //create room button listeners
     btnCreate.addEventListener('click', e => {
-        if (roomId !== null) {
+        if (roomId.creator !== -1) {
             const payLoad = {
                 'method': 'move',
                 'clientId': clientId,
-                'roomId': roomId
+                'roomId': roomId.id
             };
             ws.send(JSON.stringify(payLoad));
         }
@@ -75,15 +81,25 @@
 
     //join room button listeners
     btnJoin.addEventListener('click', e => {
-        //not room creator
-        if (roomId === null) {
-            roomId = inputGameId.value.trim();
+        if (inputGameId.value !== '') {
+            if (roomId.creator !== -1) {
+                const payLoad = {
+                    'method': 'move',
+                    'clientId': clientId,
+                    'roomId': roomId.id
+                };
+                ws.send(JSON.stringify(payLoad));
+            }
+            roomId = {
+                'id' : inputGameId.value.trim(),
+                'creator' : 0
+            };
         } 
-        
+        inputGameId.value = "";
         const payLoad = {
             'method': 'join',
             'clientId': clientId,
-            'roomId' : roomId
+            'roomId' : roomId.id
         };
         ws.send(JSON.stringify(payLoad));
     });

@@ -116,19 +116,20 @@ wsServer.on('request', request => {
                 clients[element.clientId].connection.send(JSON.stringify(payLoad));
             });
         
-        //server: client create a new room right after joining a room
+        //server: client move room
         } else if (resp.method === 'move') {
             clientId = resp.clientId;
             roomId = resp.roomId;
+            const room = rooms[roomId];
 
-            rooms[roomId].clients = rooms[roomId].clients.filter(o => o.clientId !== clientId);
+            room.clients = room.clients.filter(o => o.clientId !== clientId);
             const payLoad = {
                 'method' : 'disconnect',
                 'clientId' : clientId,
-                'room' : rooms[roomId]
+                'room' : room
             };
             // send room state through all clients
-            rooms[roomId].clients.forEach(element => {
+            room.clients.forEach(element => {
                 clients[element.clientId].connection.send(JSON.stringify(payLoad));
             });
         }
