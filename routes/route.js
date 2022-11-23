@@ -27,8 +27,7 @@ router.get('/contact/:id', (req, res) => {
     //pemanggilan view pada folder views dengan ejs
     res.render('contacts', {
         layout: 'layouts/main',
-        id: req.params.id,
-        hobi: req.query.hobi
+        id: req.params.id
     });
 });
 
