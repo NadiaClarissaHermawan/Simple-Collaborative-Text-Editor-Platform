@@ -1,11 +1,3 @@
-//html elements
-const inputName = document.getElementById('name');
-const btnCreate = document.getElementById('btnCreate');
-const btnJoin = document.getElementById('btnJoin');
-const inputRoomId = document.getElementById('roomId');
-const roomCode = document.getElementById('roomCode');
-const clientCounter = document.getElementById('clientCounter');
-
 //connect to server
 let ws = new WebSocket('ws://localhost:81');
 
@@ -13,7 +5,8 @@ let ws = new WebSocket('ws://localhost:81');
 let clientId = null;
 let roomId = {
     'id' : null,
-    'creator' : -1 //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
+    'creator' : -1, //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
+    'room' : null
 };
 
 //client ws message listener
@@ -24,48 +17,61 @@ ws.addEventListener('message', function message(data) {
     if (resp.method === 'connect') {
         clientId = resp.clientId;
         console.log('client id set successfully ' + clientId);
+
     //create
     } else if (resp.method === 'create') {
         roomId = {
             'id' : resp.roomId,
-            'creator' : 1
+            'creator' : 1,
+            'room':null
         };
         console.log('room successfully created with id ' + resp.roomId);
+        
         btnJoin.click();
+
     //join
     } else if (resp.method === 'join') {
-        console.log('client joined successfully');
-        roomCode.textContent = 'Room id : ' + roomId.id;
-        clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
-        roomCode.classList.remove('none');
-        clientCounter.classList.remove('none');
-    //someone disconnected
+        if (resp.status === false) {
+            alert('Wrong room code!');
+        } else {
+            console.log('Room ID : ' + roomId.id);
+            roomId.room = resp.room; 
+            updateEditorView();
+        }
+    
+    // receive changes 
+    } else if (resp.method === 'update') {
+        console.log('client accepted a change'+resp.text);
+        document.getElementById('editor').value = resp.text;
+
+    // someone disconnected
     } else if (resp.method === 'quit') {
         clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
         console.log('client id ' + clientId + ' has disconnected.');
     }
 });
 
-//create room button listeners
-btnCreate.addEventListener('click', e => {
+//create room button
+function createRoom (e) {
     if (roomId.creator !== -1) {
         const payLoad = {
             'method': 'move'
         };
         ws.send(JSON.stringify(payLoad));
     }
-    
+
     const payLoad = {
         'method' : 'create'
     };
     ws.send(JSON.stringify(payLoad));
-});
+}
 
-//join room button listeners
-btnJoin.addEventListener('click', e => {
-    const name = inputName.value;
+//join room button
+function joinRoom (e) {
+    const name = document.getElementById('name').value;
+    const inputRoomId = document.getElementById('roomId');
     if (nameCheck(name)) {
-        if (inputRoomId.value !== '') {
+        if (inputRoomId.value !== '' && roomId.creator !== 1) {
             if (roomId.creator !== -1) {
                 const payLoad = {
                     'method': 'move'
@@ -74,9 +80,11 @@ btnJoin.addEventListener('click', e => {
             }
             roomId = {
                 'id' : inputRoomId.value.trim(),
-                'creator' : 0
+                'creator' : 0,
+                'room':null
             };
         } 
+
         inputRoomId.value = "";
         const payload = {
             'method': 'join',
@@ -85,7 +93,7 @@ btnJoin.addEventListener('click', e => {
         };
         ws.send(JSON.stringify(payload));
     }
-});
+}
 
 //name checker
 function nameCheck (name) {
@@ -99,4 +107,29 @@ function nameCheck (name) {
         }
         return false;
     }
+};
+
+//AJAX : changing mainPage content into text editor
+function updateEditorView () {
+    const xhttp = new XMLHttpRequest(); 
+    xhttp.open('GET', '/texteditor', true);
+    xhttp.onload = function () {
+        document.getElementById('mainContainer').innerHTML = xhttp.responseText;
+        document.getElementById('roomCode').textContent = 'Room id : ' + roomId.id;;
+        document.getElementById('clientCounter').textContent = 'clients connected : ' + roomId.room.clients.length + '';
+        roomCode.classList.remove('none');
+        clientCounter.classList.remove('none');
+    };
+    xhttp.send();
+}
+
+//notify server on content changes
+function updateContent () {
+    console.log('client has made a change.') 
+    const text = document.getElementById('editor').value;
+    const payload = {
+        'method' : 'update',
+        'text' : text
+    };
+    ws.send(JSON.stringify(payload));
 };

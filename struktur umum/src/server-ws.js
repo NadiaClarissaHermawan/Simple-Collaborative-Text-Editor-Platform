@@ -1,6 +1,7 @@
 //TODO: documentation https://github.com/websockets/ws
 //--------------------------------------
 //import unique id generator
+import e from 'express';
 import { v4 as uuidv4 } from 'uuid';
 //import ws 
 import { WebSocketServer } from 'ws';
@@ -19,7 +20,7 @@ socket.on('connection', function connection(ws) {
     let roomId = null;
 
     //send connect response back to client
-    //TODO: erase client id from payload
+    //TODO: erase client id from payload -> change cookies
     const payload = {
         'method' : 'connect',
         'clientId' : clientId
@@ -47,27 +48,34 @@ socket.on('connection', function connection(ws) {
         
         //join room request
         } else if (msg.method === 'join') {
-            //store client's active status
-            clients[clientId] = {
-                'name' : msg.name,
-                'connection' : ws
-            };
-
             roomId = msg.roomId;
             const room = rooms[roomId];
-            room.clients.push({
-                'clientId' : clientId
-            });
-
-            const payload = {
-                'method' : 'join',
-                'room' : room
-            };
-
-            //send room state through all clients
-            Array.prototype.forEach.call(room.clients, element => {
-                clients[element.clientId].connection.send(JSON.stringify(payload));
-            });
+            let payload;
+            if (room === undefined) {
+                payload = {
+                    'method' : 'join',
+                    'status' : false
+                };
+                ws.send(JSON.stringify(payload));
+            } else {
+                //store client's active status
+                clients[clientId] = {
+                    'name' : msg.name,
+                    'connection' : ws
+                };
+                room.clients.push({
+                    'clientId' : clientId
+                });
+                payload = {
+                    'method' : 'join',
+                    'status' : true,
+                    'room' : room
+                };
+                //send room state through all clients
+                Array.prototype.forEach.call(room.clients, element => {
+                    clients[element.clientId].connection.send(JSON.stringify(payload));
+                });
+            }    
         
         //disconnect/move from room without quitting request    
         } else if (msg.method === 'move') {
@@ -80,6 +88,22 @@ socket.on('connection', function connection(ws) {
             //send room state through all clients
             Array.prototype.forEach.call(room.clients, element => {
                 clients[element.clientId].connection.send(JSON.stringify(payload));
+            });
+
+        //notify other clients over a change    
+        } else if (msg.method === 'update') {
+            console.log('a client has made a change.' + msg.text);
+            //notify other clients on the same room about the changes 
+            const room = rooms[roomId];
+            const payload = {
+                'method' : 'update',
+                'text' : msg.text
+            };
+            Array.prototype.forEach.call(room.clients, element => {
+                if (element.clientId !== clientId) {
+                    console.log(element.clientId);
+                    clients[element.clientId].connection.send(JSON.stringify(payload));
+                }
             });
         }
     });
