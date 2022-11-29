@@ -1,46 +1,29 @@
 //import express
 import express from "express";
 
+//import server 
+import socket from "./server-ws.js";
+
+//import router
+import Router from "./routes.js";
+
 //init express
 const app = express();
 const PORT = 80;
 
-//import & use router middleware
-import Router from "./routes.js";
+//use router middleware
 app.use(Router);
 
 //use ejs view engine
 app.set('view engine', 'ejs');
 
-//set static folder (access to public folder for media etc)
+//set static folder (giving global access for a folder)
 app.use(express.static('public'));
+app.use(express.static('views'));
 
 //port
 app.listen(PORT, () => console.log('Server running at port ' + PORT + '.'));
 
-//TODO: LAST HERE
-//--------------------------------------
-const socket = new WebSocket("wss://javascript.info");
-socket.onopen = function(e) {
-    alert("[open] Connection established");
-    alert("Sending to server");
-    socket.send("My name is John");
-};
 
-socket.onmessage = function(event) {
-    alert(`[message] Data received from server: ${event.data}`);
-};
 
-socket.onclose = function(event) {
-    if (event.wasClean) {
-        alert(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
-    } else {
-        // e.g. server process killed or network down
-        // event.code is usually 1006 in this case
-        alert('[close] Connection died');
-    }
-};
 
-socket.onerror = function(error) {
-    alert(`[error]`);
-};

@@ -1,12 +1,13 @@
 //html elements
+const inputName = document.getElementById('name');
 const btnCreate = document.getElementById('btnCreate');
 const btnJoin = document.getElementById('btnJoin');
-const inputGameId = document.getElementById('roomId');
+const inputRoomId = document.getElementById('roomId');
 const roomCode = document.getElementById('roomCode');
 const clientCounter = document.getElementById('clientCounter');
 
 //connect to server
-let ws = new WebSocket('ws://localhost:88');
+let ws = new WebSocket('ws://localhost:81');
 
 //declare attr
 let clientId = null;
@@ -16,8 +17,8 @@ let roomId = {
 };
 
 //client ws message listener
-ws.onmessage = message => {
-    const resp = JSON.parse(message.data);
+ws.addEventListener('message', function message(data) {
+    const resp = JSON.parse(data.data);
 
     //connect
     if (resp.method === 'connect') {
@@ -26,10 +27,10 @@ ws.onmessage = message => {
     //create
     } else if (resp.method === 'create') {
         roomId = {
-            'id' : resp.room.roomId,
+            'id' : resp.roomId,
             'creator' : 1
         };
-        console.log('room successfully created with id ' + resp.room.roomId);
+        console.log('room successfully created with id ' + resp.roomId);
         btnJoin.click();
     //join
     } else if (resp.method === 'join') {
@@ -39,51 +40,63 @@ ws.onmessage = message => {
         roomCode.classList.remove('none');
         clientCounter.classList.remove('none');
     //someone disconnected
-    } else if (resp.method === 'disconnect') {
+    } else if (resp.method === 'quit') {
         clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
-        console.log('client id ' + resp.clientId + ' has disconnected.');
+        console.log('client id ' + clientId + ' has disconnected.');
     }
-};
+});
 
 //create room button listeners
 btnCreate.addEventListener('click', e => {
     if (roomId.creator !== -1) {
         const payLoad = {
-            'method': 'move',
-            'clientId': clientId,
-            'roomId': roomId.id
+            'method': 'move'
         };
         ws.send(JSON.stringify(payLoad));
     }
     
     const payLoad = {
-        'method': 'create',
-        'clientId': clientId
+        'method' : 'create'
     };
     ws.send(JSON.stringify(payLoad));
 });
 
 //join room button listeners
 btnJoin.addEventListener('click', e => {
-    if (inputGameId.value !== '') {
-        if (roomId.creator !== -1) {
-            const payLoad = {
-                'method': 'move',
-                'clientId': clientId,
-                'roomId': roomId.id
+    const name = inputName.value;
+    if (nameCheck(name)) {
+        if (inputRoomId.value !== '') {
+            if (roomId.creator !== -1) {
+                const payLoad = {
+                    'method': 'move'
+                };
+                ws.send(JSON.stringify(payLoad));
+            }
+            roomId = {
+                'id' : inputRoomId.value.trim(),
+                'creator' : 0
             };
-            ws.send(JSON.stringify(payLoad));
-        }
-        roomId = {
-            'id' : inputGameId.value.trim(),
-            'creator' : 0
+        } 
+        inputRoomId.value = "";
+        const payload = {
+            'method': 'join',
+            'name': 'tester',
+            'roomId' : roomId.id
         };
-    } 
-    inputGameId.value = "";
-    const payLoad = {
-        'method': 'join',
-        'clientId': clientId,
-        'roomId' : roomId.id
-    };
-    ws.send(JSON.stringify(payLoad));
+        ws.send(JSON.stringify(payload));
+    }
 });
+
+//name checker
+function nameCheck (name) {
+    if (name !== '' && name.length >= 4) {
+        return true;
+    } else {
+        if (name.length < 4) {
+            alert('Please use 4 character or more!');
+        } else {
+            alert('Username is missing!');
+        }
+        return false;
+    }
+};

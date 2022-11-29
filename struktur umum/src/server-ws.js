@@ -1,131 +1,111 @@
-//referensi dari websocket sebelumnya
+//TODO: documentation https://github.com/websockets/ws
+//--------------------------------------
+//import unique id generator
+import { v4 as uuidv4 } from 'uuid';
+//import ws 
+import { WebSocketServer } from 'ws';
 
-//create http server
-const http = require('http');
-const { connect } = require('http2');
-const httpServer = http.createServer();
-const WSPORT = 88;
-
-//http server listen on port
-httpServer.listen(WSPORT, function() {
-    console.log('Http Server is listening on port ' + WSPORT);
-});
-
-//create websocket server with the http server
-const websocketServer = require('websocket').server;
-const wsServer = new websocketServer({
-    'httpServer': httpServer
-});
-
-//use unique id generator
-const { v4 : uuidv4 } = require('uuid');
-const { client } = require('websocket');
-const { resourceLimits } = require('worker_threads');
+//initialize server & websocket for server
+const socket = new WebSocketServer({ port : 81 });
 
 //hashmap of clients connected & rooms available
 const clients = {};
 const rooms = {};
 
-//client request to connect
-wsServer.on('request', request => {
-    const connection = request.accept(null, request.origin);
-    let clientId = null;
+//when client connect, do..
+socket.on('connection', function connection(ws) {
+    //generate unique clientId
+    let clientId = uuidv4();
     let roomId = null;
 
-    //generate unique client id & store the connection
-    clientId = uuidv4();
-    clients[clientId] = {
-        'connection' : connection
-    };
-
     //send connect response back to client
+    //TODO: erase client id from payload
     const payload = {
         'method' : 'connect',
         'clientId' : clientId
     };
-    connection.send(JSON.stringify(payload));
+    ws.send(JSON.stringify(payload));
 
-    //when client connected do..
-    connection.on('open', () => console.log('connection opened!'));
-    
     //when server received message from client, do..
-    connection.on('message', (message) => {
-        const resp = JSON.parse(message.utf8Data);
-        console.log(resp);
-
-        //server: create room request listener
-        if (resp.method === 'create') {
-            clientId = resp.clientId;
+    ws.on('message', function message(data, isBinary) {
+        const msg = isBinary ? data : JSON.parse(data.toString()); 
+        
+        //create room request
+        if (msg.method === 'create') {
             roomId = uuidv4();
-            //TODO: write room's last state 
+            //TODO:note room's text editor first state -> database
             rooms[roomId] = {
-                'roomId' : roomId,
                 'clients' : []
-            }
+            };
 
             const payload = {
                 'method' : 'create',
+                'roomId' : roomId,
                 'room' : rooms[roomId]
-            }
+            };
+            ws.send(JSON.stringify(payload));
+        
+        //join room request
+        } else if (msg.method === 'join') {
+            //store client's active status
+            clients[clientId] = {
+                'name' : msg.name,
+                'connection' : ws
+            };
 
-            const con = clients[clientId].connection;
-            con.send(JSON.stringify(payload));
-
-        //server: join room request listener
-        } else if (resp.method === 'join') {
-            clientId = resp.clientId;
-            roomId = resp.roomId;
+            roomId = msg.roomId;
             const room = rooms[roomId];
-            
             room.clients.push({
                 'clientId' : clientId
             });
 
-            const payLoad = {
+            const payload = {
                 'method' : 'join',
                 'room' : room
-            }
+            };
 
             //send room state through all clients
-            room.clients.forEach(element => {
-                clients[element.clientId].connection.send(JSON.stringify(payLoad));
+            Array.prototype.forEach.call(room.clients, element => {
+                clients[element.clientId].connection.send(JSON.stringify(payload));
             });
         
-        //server: client move room
-        } else if (resp.method === 'move') {
-            clientId = resp.clientId;
-            roomId = resp.roomId;
+        //disconnect/move from room without quitting request    
+        } else if (msg.method === 'move') {
             const room = rooms[roomId];
-
             room.clients = room.clients.filter(o => o.clientId !== clientId);
-            const payLoad = {
+            const payload = {
                 'method' : 'disconnect',
-                'clientId' : clientId,
-                'room' : room
+                'room' : room 
             };
-            // send room state through all clients
-            room.clients.forEach(element => {
-                clients[element.clientId].connection.send(JSON.stringify(payLoad));
+            //send room state through all clients
+            Array.prototype.forEach.call(room.clients, element => {
+                clients[element.clientId].connection.send(JSON.stringify(payload));
             });
         }
     });
 
-    //when client disconnected do..
-    connection.on('close', () => {
-        console.log('client ' + clientId + ' disconnected from room ' + roomId);
+    //when client disconnected, do..
+    ws.on('close', function connection(ws) {
+        //delete innactive client
         delete clients[clientId];
-        rooms[roomId].clients = rooms[roomId].clients.filter(o => o.clientId !== clientId);
         
-        const payLoad = {
-            'method' : 'disconnect',
-            'clientId' : clientId,
-            'room' : rooms[roomId]
-        };
-        // send room state through all clients
-        rooms[roomId].clients.forEach(element => {
-            clients[element.clientId].connection.send(JSON.stringify(payLoad));
-        });
+        if (roomId !== null) {
+            console.log('client ' + clientId + ' disconnected from room ' + roomId);
+            const room = rooms[roomId];
+            room.clients = room.clients.filter(o => o.clientId !== clientId);
+
+            const payload = {
+                'method' : 'quit',
+                'clientId' : clientId,
+                'room' : room
+            };
+            //send room state through all clients
+            Array.prototype.forEach.call(room.clients, element => {
+                clients[element.clientId].connection.send(JSON.stringify(payload));
+            });
+        }
     });
 });
 
-export default wsServer;
+//export websocker server
+export default socket;

@@ -75,6 +75,7 @@ wsServer.on('request', request => {
     
     //when server received message from client, do..
     connection.on('message', (message) => {
+        console.log(message);
         const resp = JSON.parse(message.utf8Data);
         console.log(resp);
 
