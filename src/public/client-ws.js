@@ -15,8 +15,11 @@ ws.addEventListener('message', function message(data) {
 
     //connect
     if (resp.method === 'connect') {
+        document.cookie = "clientId=" + resp.clientId;
         clientId = resp.clientId;
-        console.log('client id set successfully ' + clientId);
+        //retrieve cookie value example
+        const test = document.cookie.substring(9);
+        console.log('client id set successfully ' + test);
 
     //create
     } else if (resp.method === 'create') {
@@ -123,13 +126,29 @@ function updateEditorView () {
     xhttp.send();
 }
 
+//getting client's Carret position
+function getCaretPosition(element) {
+    const position = 0;
+    const selection = document.getSelection();
+    console.log(selection.anchorNode.nodeType);
+    // if (selection.rangeCount !== 0) {
+    //     const range = window.getSelection().getRangeAt(0);
+    //     const preCaretRange = range.cloneRange();
+    //     preCaretRange.selectNodeContents(element);
+    //     preCaretRange.setEnd(range.endContainer, range.endOffset);
+    //     position = preCaretRange.toString().length;
+    // }
+    // console.log(position);
+};
+
 //notify server on content changes
 function updateContent () {
     console.log('client has made a change.') 
-    const text = document.getElementById('editor').value;
+    const text = document.getElementById('editor').textContent;
     const payload = {
         'method' : 'update',
         'text' : text
     };
     ws.send(JSON.stringify(payload));
 };
+
