@@ -1,10 +1,29 @@
-<section id="contentContainer" class="d-flex flex-column mt-5 align-items-center w-100 h-100">
-    <div class="d-flex flex-column text-start mb-3">
-        <span id="roomCode" class="none"></span>
-        <span id="clientCounter" class="none"></span> 
+<section class="d-flex flex-column mt-4">
+    <div id="container-info" class="d-flex flex-column text-center mb-3">
+        <span id="clientCounter"></span> 
+        <span id="roomCode"></span>
     </div>
-    <!-- <textarea id="editor" autofocus placeholder="Insert text here.." onkeyup="updateContent()"
-    class="w-75" rows="10"></textarea> -->
-
-    <div id="editor" class="w-75 h-75 p-2 border border-dark rounded" contenteditable="true" onkeyup="updateContent()" onclick="getCaretPosition(Element)"></div>
+    <div id="container-editor">
+        <!-- cursor -->
+        <div id="cursor-wrapper" class="none">
+            <div id="cursor" style>&nbsp</div> 
+        </div>
+        <!-- hidden text editor -->
+        <div id="textarea-wrapper">
+            <textarea id="textarea" onkeyup="updateContent(event)">
+            </textarea>
+        </div>
+        <!-- outer text editor / container -->
+        <div id="text-presentation-wrapper" class="w-75 h-75 p-3 border border-dark rounded">
+            <!-- text editor presentation -->
+            <div id="text-presentation" class="w-100 h-100 bg-primary" tabindex="0" onclick="getCaretPosition(event)">     
+                <!-- first line -->
+                <div id="1" class="line">
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
+
+

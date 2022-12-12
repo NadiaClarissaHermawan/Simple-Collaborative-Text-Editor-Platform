@@ -8,6 +8,12 @@ let roomId = {
     'creator' : -1, //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
     'room' : null
 };
+let clientCursor = {
+    'line' : 1,
+    'caret' : 0,
+    'maxLine' : 1
+};
+
 
 //client ws message listener
 ws.addEventListener('message', function message(data) {
@@ -39,13 +45,13 @@ ws.addEventListener('message', function message(data) {
         } else {
             console.log('Room ID : ' + roomId.id);
             roomId.room = resp.room; 
-            updateEditorView();
+            moveToTextEditor();
         }
     
     // receive changes 
     } else if (resp.method === 'update') {
-        console.log('client accepted a change'+resp.text);
-        document.getElementById('editor').value = resp.text;
+        document.getElementById(resp.line).children[0].textContent = resp.text;
+        document.getElementById('textarea').value = resp.text;
 
     // someone disconnected
     } else if (resp.method === 'quit') {
@@ -53,6 +59,7 @@ ws.addEventListener('message', function message(data) {
         console.log('client id ' + clientId + ' has disconnected.');
     }
 });
+
 
 //create room button
 function createRoom (e) {
@@ -68,6 +75,7 @@ function createRoom (e) {
     };
     ws.send(JSON.stringify(payLoad));
 }
+
 
 //join room button
 function joinRoom (e) {
@@ -98,6 +106,7 @@ function joinRoom (e) {
     }
 }
 
+
 //name checker
 function nameCheck (name) {
     if (name !== '' && name.length >= 4) {
@@ -112,43 +121,92 @@ function nameCheck (name) {
     }
 };
 
+
 //AJAX : changing mainPage content into text editor
-function updateEditorView () {
+function moveToTextEditor () {
     const xhttp = new XMLHttpRequest(); 
     xhttp.open('GET', '/texteditor', true);
     xhttp.onload = function () {
         document.getElementById('mainContainer').innerHTML = xhttp.responseText;
         document.getElementById('roomCode').textContent = 'Room id : ' + roomId.id;;
         document.getElementById('clientCounter').textContent = 'clients connected : ' + roomId.room.clients.length + '';
-        roomCode.classList.remove('none');
-        clientCounter.classList.remove('none');
     };
     xhttp.send();
 }
 
-//getting client's Carret position
-function getCaretPosition(element) {
-    const position = 0;
-    const selection = document.getSelection();
-    console.log(selection.anchorNode.nodeType);
-    // if (selection.rangeCount !== 0) {
-    //     const range = window.getSelection().getRangeAt(0);
-    //     const preCaretRange = range.cloneRange();
-    //     preCaretRange.selectNodeContents(element);
-    //     preCaretRange.setEnd(range.endContainer, range.endOffset);
-    //     position = preCaretRange.toString().length;
-    // }
-    // console.log(position);
+
+//getting click position (line & caret) & update cursor position
+function getCaretPosition(event) {
+    const container = document.getElementById('text-presentation');
+    let textBounding, clickedElement;
+
+    //container clicked
+    if (event.target === container) {
+        //move cursor to the last line & rightmost caret position in the line
+        clickedElement = document.getElementById(clientCursor.maxLine);
+        textBounding = clickedElement.children[0].getBoundingClientRect();
+        clientCursor.line = clientCursor.maxLine;
+        clientCursor.caret = textBounding.right;
+    
+    //existing line clicked
+    } else {
+        clickedElement = event.target;
+        textBounding = clickedElement.getBoundingClientRect();
+        //text span TODO:caret harus sesuai lebar huruf text
+        if (!clickedElement.classList.contains('line')) {
+            clientCursor.line = clickedElement.parentNode.id;
+            clientCursor.caret = event.clientX;
+        //div (span wrapper)
+        } else {
+            clientCursor.line = clickedElement.id;
+            clientCursor.caret = clickedElement.children[0].getBoundingClientRect().right;
+        }
+    } 
+    updateCursor(textBounding);
+
+    //move focus to textarea 
+    const textarea = document.getElementById('textarea');
+    textarea.focus();
 };
+
+
+//update cursor's x and y
+function updateCursor (textBounding) {
+    const cursor = document.getElementById('cursor-wrapper');
+    const c = document.getElementById('cursor');
+    const wrapper = document.getElementById('text-presentation-wrapper');
+    const wrBounding = wrapper.getBoundingClientRect();
+
+    //update cursor position
+    c.style.left = clientCursor.caret + "px";
+    c.style.top = (textBounding.y - wrBounding.y) + "px";
+    cursor.classList.remove('none');
+}
+
 
 //notify server on content changes
-function updateContent () {
-    console.log('client has made a change.') 
-    const text = document.getElementById('editor').textContent;
-    const payload = {
-        'method' : 'update',
-        'text' : text
-    };
-    ws.send(JSON.stringify(payload));
-};
+function updateContent (event) {
+    const textarea = document.getElementById('textarea');
 
+    //adding new line div
+    if (event.key === 'Enter') {
+        const textPresentation = document.getElementById('text-presentation');
+        const lineDiv = document.createElement('div');
+        const lineSpan = document.createElement('span');
+        lineDiv.classList.add('line');
+        lineDiv.id = clientCursor.line + 1;
+        lineDiv.appendChild(lineSpan);
+        textPresentation.appendChild(lineDiv); 
+        
+        textarea.value = "";
+        //TODO: kalo line id 1, 2, 3... --> semisal di line 1 ada yg enter gmn idnya?? 
+    } else {
+        const text = textarea.value;
+        const payload = {
+            'method' : 'update',
+            'text' : text,
+            'clientCursor' : clientCursor
+        };
+        ws.send(JSON.stringify(payload));
+    } 
+};

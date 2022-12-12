@@ -63,6 +63,7 @@ socket.on('connection', function connection(ws) {
                     'name' : msg.name,
                     'connection' : ws
                 };
+                //store client's last state at current room
                 room.clients.push({
                     'clientId' : clientId
                 });
@@ -92,18 +93,17 @@ socket.on('connection', function connection(ws) {
 
         //notify other clients over a change    
         } else if (msg.method === 'update') {
-            console.log('a client has made a change.' + msg.text);
+            console.log('a client has made a change.' + msg.clientCursor['line']);
             //notify other clients on the same room about the changes 
             const room = rooms[roomId];
             const payload = {
                 'method' : 'update',
-                'text' : msg.text
+                'text' : msg.text,
+                'line' : msg.clientCursor['line']
             };
             Array.prototype.forEach.call(room.clients, element => {
-                if (element.clientId !== clientId) {
-                    console.log(element.clientId);
-                    clients[element.clientId].connection.send(JSON.stringify(payload));
-                }
+                console.log(element.clientId);
+                clients[element.clientId].connection.send(JSON.stringify(payload));
             });
         }
     });

@@ -1,3 +1,44 @@
 .none{
-    display: none;
+    visibility: hidden;
+}
+
+#cursor-wrapper {
+    z-index: 3;
+    position: relative;
+}
+
+#cursor {
+    pointer-events: none;
+    border-left: 1px solid black;
+    position: absolute;
+    line-height: 1.5;
+}
+
+#textarea-wrapper {
+    overflow: hidden;
+    position: relative;
+}
+
+#textarea {
+    position: absolute;
+}
+
+#text-presentation-wrapper {
+    position: absolute;
+    left: 0;
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#text-presentation {
+    z-index: 2;
+    position: relative;
+}
+
+.line {
+    line-height: 1.5;
+    z-index: 3;
+    position: relative;
+    display: block;
 }
