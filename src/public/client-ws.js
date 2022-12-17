@@ -154,7 +154,6 @@ function getCaretPosition(event) {
     
     //existing line clicked
     } else {
-        console.log(event.target);
         clickedElement = event.target;
         textBounding = clickedElement.getBoundingClientRect();
         //text span 
@@ -165,8 +164,9 @@ function getCaretPosition(event) {
         //div (span wrapper)
         } else {
             clientCursor.line = clickedElement.id;
-            clientCursor.cursorX = clickedElement.children[0].getBoundingClientRect().right;
-            clientCursor.caret = clickedElement.children[0].textContent.length;
+            clickedElement = clickedElement.children[0];
+            clientCursor.cursorX = clickedElement.getBoundingClientRect().right;
+            clientCursor.caret = clickedElement.textContent.length;
         }
     } 
     clientCursor.cursorY = textBounding.y;
@@ -174,6 +174,7 @@ function getCaretPosition(event) {
 
     //move focus to textarea 
     const textarea = document.getElementById('textarea');
+    textarea.value = clickedElement.textContent;
     textarea.setSelectionRange(clientCursor.caret, clientCursor.caret);
     textarea.focus();
 };
@@ -198,33 +199,27 @@ function receiveInput (event) {
 
     //adding new line div
     if (event.key === 'Enter') {
-        event.preventDefault();
         clientCursor.maxLine += 1;
-        const textPresentation = document.getElementById('text-presentation');
+        const lastLineDiv = document.getElementById(clientCursor.line);
         const lineDiv = document.createElement('div');
         const lineSpan = document.createElement('span');
         lineDiv.id = clientCursor.maxLine;
         lineDiv.classList.add('line');
 
         //bukan di akhir line
-        console.log(textarea.value.length);
-        console.log(clientCursor.caret);
         if ((textarea.value.length - 1) !== clientCursor.caret) {
-            console.log('not end of line');
             notifyUpdate(textarea.value.substring(0, clientCursor.caret));
-            textarea.value = textarea.value.substring(clientCursor.caret);
+            textarea.value = textarea.value.substring(clientCursor.caret + 1);
+        //di akhir line
         } else {
-            console.log('end of line');
             textarea.value = "";
         }
         lineSpan.textContent = textarea.value;
         lineDiv.appendChild(lineSpan);
-        textPresentation.appendChild(lineDiv); 
+        lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
 
         //move clicked position
-        //TODO:masih masalah krn ketika event.target gabisa kedetect
-        console.log(document.getElementById(clientCursor.maxLine).children[0].click().target);
-        // getCaretPosition(document.getElementById(clientCursor.maxLine).children[0].click());
+        document.getElementById('text-presentation').click();
     
     } else {
         //TODO:ini ga efektif krn gabisa pake method getCaret yang ada
