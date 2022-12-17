@@ -15,7 +15,7 @@
 }
 
 #textarea-wrapper {
-    overflow: hidden;
+    /* overflow: hidden; */
     position: relative;
 }
 
@@ -41,4 +41,8 @@
     z-index: 3;
     position: relative;
     display: block;
+}
+
+.line:first-child {
+    font-family: monospace;
 }

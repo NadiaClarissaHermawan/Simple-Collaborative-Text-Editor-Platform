@@ -11,8 +11,11 @@ let roomId = {
 let clientCursor = {
     'line' : 1,
     'caret' : 0,
-    'maxLine' : 1
+    'maxLine' : 1,
+    'cursorX' : 0,
+    'cursorY' : 0
 };
+let letterWidth = 0;
 
 
 //client ws message listener
@@ -135,7 +138,7 @@ function moveToTextEditor () {
 }
 
 
-//getting click position (line & caret) & update cursor position
+//getting click position (line, x and caret)
 function getCaretPosition(event) {
     const container = document.getElementById('text-presentation');
     let textBounding, clickedElement;
@@ -143,70 +146,106 @@ function getCaretPosition(event) {
     //container clicked
     if (event.target === container) {
         //move cursor to the last line & rightmost caret position in the line
-        clickedElement = document.getElementById(clientCursor.maxLine);
-        textBounding = clickedElement.children[0].getBoundingClientRect();
+        clickedElement = document.getElementById(clientCursor.maxLine).children[0];
+        textBounding = clickedElement.getBoundingClientRect();
         clientCursor.line = clientCursor.maxLine;
-        clientCursor.caret = textBounding.right;
+        clientCursor.cursorX = textBounding.right;
+        clientCursor.caret = clickedElement.textContent.length;
     
     //existing line clicked
     } else {
+        console.log(event.target);
         clickedElement = event.target;
         textBounding = clickedElement.getBoundingClientRect();
-        //text span TODO:caret harus sesuai lebar huruf text
+        //text span 
         if (!clickedElement.classList.contains('line')) {
             clientCursor.line = clickedElement.parentNode.id;
-            clientCursor.caret = event.clientX;
+            clientCursor.caret = window.getSelection().anchorOffset;
+            clientCursor.cursorX = (textBounding.left + (((textBounding.right - textBounding.left) / clickedElement.textContent.length) * clientCursor.caret));
         //div (span wrapper)
         } else {
             clientCursor.line = clickedElement.id;
-            clientCursor.caret = clickedElement.children[0].getBoundingClientRect().right;
+            clientCursor.cursorX = clickedElement.children[0].getBoundingClientRect().right;
+            clientCursor.caret = clickedElement.children[0].textContent.length;
         }
     } 
-    updateCursor(textBounding);
+    clientCursor.cursorY = textBounding.y;
+    updateCursor();
 
     //move focus to textarea 
     const textarea = document.getElementById('textarea');
+    textarea.setSelectionRange(clientCursor.caret, clientCursor.caret);
     textarea.focus();
 };
 
 
 //update cursor's x and y
-function updateCursor (textBounding) {
+function updateCursor () {
     const cursor = document.getElementById('cursor-wrapper');
     const c = document.getElementById('cursor');
-    const wrapper = document.getElementById('text-presentation-wrapper');
-    const wrBounding = wrapper.getBoundingClientRect();
+    const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
 
     //update cursor position
-    c.style.left = clientCursor.caret + "px";
-    c.style.top = (textBounding.y - wrBounding.y) + "px";
+    c.style.left = clientCursor.cursorX + "px";
+    c.style.top = (clientCursor.cursorY - wrapperBounding.y) + "px";
     cursor.classList.remove('none');
 }
 
 
-//notify server on content changes
-function updateContent (event) {
+//accept input from clients
+function receiveInput (event) {
     const textarea = document.getElementById('textarea');
 
     //adding new line div
     if (event.key === 'Enter') {
+        event.preventDefault();
+        clientCursor.maxLine += 1;
         const textPresentation = document.getElementById('text-presentation');
         const lineDiv = document.createElement('div');
         const lineSpan = document.createElement('span');
+        lineDiv.id = clientCursor.maxLine;
         lineDiv.classList.add('line');
-        lineDiv.id = clientCursor.line + 1;
+
+        //bukan di akhir line
+        console.log(textarea.value.length);
+        console.log(clientCursor.caret);
+        if ((textarea.value.length - 1) !== clientCursor.caret) {
+            console.log('not end of line');
+            notifyUpdate(textarea.value.substring(0, clientCursor.caret));
+            textarea.value = textarea.value.substring(clientCursor.caret);
+        } else {
+            console.log('end of line');
+            textarea.value = "";
+        }
+        lineSpan.textContent = textarea.value;
         lineDiv.appendChild(lineSpan);
         textPresentation.appendChild(lineDiv); 
-        
-        textarea.value = "";
-        //TODO: kalo line id 1, 2, 3... --> semisal di line 1 ada yg enter gmn idnya?? 
+
+        //move clicked position
+        //TODO:masih masalah krn ketika event.target gabisa kedetect
+        console.log(document.getElementById(clientCursor.maxLine).children[0].click().target);
+        // getCaretPosition(document.getElementById(clientCursor.maxLine).children[0].click());
+    
     } else {
-        const text = textarea.value;
-        const payload = {
-            'method' : 'update',
-            'text' : text,
-            'clientCursor' : clientCursor
-        };
-        ws.send(JSON.stringify(payload));
-    } 
+        //TODO:ini ga efektif krn gabisa pake method getCaret yang ada
+        //gabisa pake mthod tsb karena window selectionnya blm ketemu cara ngesetnya.
+        const textElement = document.getElementById(clientCursor.line).children[0];
+        const textBounding = textElement.getBoundingClientRect(); 
+        clientCursor.caret += 1;
+        clientCursor.cursorX = (textBounding.left + (((textBounding.right - textBounding.left) / textElement.textContent.length) * clientCursor.caret));
+        clientCursor.cursorY = document.getElementById(clientCursor.line).children[0].getBoundingClientRect().y;
+
+        updateCursor();
+    }
+    notifyUpdate(textarea.value);
 };
+
+//notify server & other clients over a change
+function notifyUpdate (text) {
+    const payload = {
+        'method' : 'update',
+        'text' : text,
+        'clientCursor' : clientCursor
+    };
+    ws.send(JSON.stringify(payload));
+}

@@ -93,7 +93,7 @@ socket.on('connection', function connection(ws) {
 
         //notify other clients over a change    
         } else if (msg.method === 'update') {
-            console.log('a client has made a change.' + msg.clientCursor['line']);
+            console.log('a client has made a change at line :' + msg.clientCursor['line']);
             //notify other clients on the same room about the changes 
             const room = rooms[roomId];
             const payload = {
