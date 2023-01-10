@@ -43,21 +43,39 @@ ws.addEventListener('message', function message(data) {
 
     //join
     } else if (resp.method === 'join') {
-        if (resp.status === false) {
+        if (resp.status === -1) {
             alert('Wrong room code!');
         } else {
-            console.log('Room ID : ' + roomId.id);
-            roomId.room = resp.room; 
-            moveToTextEditor();
-        }
+            roomId.room = resp.room;
+            if (resp.status === 0) {
+                moveToTextEditor();
+            } else {
+                document.getElementById('clientCounter').textContent = 'clients connected : ' + roomId.room.clients.length + '';
+            }
+        } 
     
     // receive changes 
     } else if (resp.method === 'update') {
-        document.getElementById(resp.line).children[0].textContent = resp.text;
-        document.getElementById('textarea').value = resp.text;
-
+        const lineDiv = document.getElementById(resp.line);
+        //new line TODO:update maxline on this client
+        if (lineDiv === null) {
+            //TODO: pisahkan 1 method untuk create new line 
+            const lastLineDiv = document.getElementById(resp.lastLine);
+            const lineDiv = document.createElement('div');
+            const lineSpan = document.createElement('span');
+            lineDiv.id = resp.line;
+            lineDiv.classList.add('line');
+            lineSpan.textContent = resp.text;
+            lineDiv.appendChild(lineSpan);
+            lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling);
+            clientCursor.maxLine = resp.line; 
+        } else {
+            lineDiv.children[0].textContent = resp.text;
+            document.getElementById('textarea').value = resp.text;
+        }
+        
     // someone disconnected
-    } else if (resp.method === 'quit') {
+    } else if (resp.method === 'disconnect') {
         clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
         console.log('client id ' + clientId + ' has disconnected.');
     }
@@ -102,7 +120,7 @@ function joinRoom (e) {
         inputRoomId.value = "";
         const payload = {
             'method': 'join',
-            'name': 'tester',
+            'name': 'name',
             'roomId' : roomId.id
         };
         ws.send(JSON.stringify(payload));
@@ -146,9 +164,9 @@ function getCaretPosition(event) {
     //container clicked
     if (event.target === container) {
         //move cursor to the last line & rightmost caret position in the line
-        clickedElement = document.getElementById(clientCursor.maxLine).children[0];
+        clickedElement = container.lastElementChild.children[0];
         textBounding = clickedElement.getBoundingClientRect();
-        clientCursor.line = clientCursor.maxLine;
+        clientCursor.line = clickedElement.parentNode.id;
         clientCursor.cursorX = textBounding.right;
         clientCursor.caret = clickedElement.textContent.length;
     
@@ -156,6 +174,7 @@ function getCaretPosition(event) {
     } else {
         clickedElement = event.target;
         textBounding = clickedElement.getBoundingClientRect();
+        console.log(textBounding);
         //text span 
         if (!clickedElement.classList.contains('line')) {
             clientCursor.line = clickedElement.parentNode.id;
@@ -196,6 +215,7 @@ function updateCursor () {
 //accept input from clients
 function receiveInput (event) {
     const textarea = document.getElementById('textarea');
+    const lastLine = clientCursor.line;
 
     //adding new line div
     if (event.key === 'Enter') {
@@ -208,12 +228,14 @@ function receiveInput (event) {
 
         //bukan di akhir line
         if ((textarea.value.length - 1) !== clientCursor.caret) {
-            notifyUpdate(textarea.value.substring(0, clientCursor.caret));
+            notifyUpdate(textarea.value.substring(0, clientCursor.caret), lastLine);
             textarea.value = textarea.value.substring(clientCursor.caret + 1);
         //di akhir line
         } else {
             textarea.value = "";
         }
+        
+        clientCursor.line = clientCursor.maxLine;
         lineSpan.textContent = textarea.value;
         lineDiv.appendChild(lineSpan);
         lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
@@ -232,15 +254,16 @@ function receiveInput (event) {
 
         updateCursor();
     }
-    notifyUpdate(textarea.value);
+    notifyUpdate(textarea.value, lastLine);
 };
 
 //notify server & other clients over a change
-function notifyUpdate (text) {
+function notifyUpdate (text, lastLine) {
     const payload = {
         'method' : 'update',
         'text' : text,
-        'clientCursor' : clientCursor
+        'clientCursor' : clientCursor,
+        'lastLine' : lastLine
     };
     ws.send(JSON.stringify(payload));
 }

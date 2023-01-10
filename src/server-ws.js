@@ -54,7 +54,7 @@ socket.on('connection', function connection(ws) {
             if (room === undefined) {
                 payload = {
                     'method' : 'join',
-                    'status' : false
+                    'status' : -1
                 };
                 ws.send(JSON.stringify(payload));
             } else {
@@ -69,12 +69,21 @@ socket.on('connection', function connection(ws) {
                 });
                 payload = {
                     'method' : 'join',
-                    'status' : true,
+                    'status' : 1,
+                    'room' : room
+                };
+                const selfpayload = {
+                    'method' : 'join',
+                    'status' : 0,
                     'room' : room
                 };
                 //send room state through all clients
                 Array.prototype.forEach.call(room.clients, element => {
-                    clients[element.clientId].connection.send(JSON.stringify(payload));
+                    if (element.clientId !== clientId) {
+                        clients[element.clientId].connection.send(JSON.stringify(payload));
+                    } else {
+                        clients[element.clientId].connection.send(JSON.stringify(selfpayload));
+                    }
                 });
             }    
         
@@ -99,7 +108,8 @@ socket.on('connection', function connection(ws) {
             const payload = {
                 'method' : 'update',
                 'text' : msg.text,
-                'line' : msg.clientCursor['line']
+                'line' : msg.clientCursor['line'],
+                'lastLine' : msg.lastLine
             };
             Array.prototype.forEach.call(room.clients, element => {
                 console.log(element.clientId);
