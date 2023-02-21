@@ -100,22 +100,28 @@ socket.on('connection', function connection(ws) {
                 clients[element.clientId].connection.send(JSON.stringify(payload));
             });
 
-        //notify other clients over a change    
-        } else if (msg.method === 'update') {
-            console.log('a client has made a change at line :' + msg.clientCursor['line']);
+        //notify other clients over a changed text  
+        } else if (msg.method === 'updateText') {
+            console.log('client ' + msg.editorId + ' has made a change at line :' + msg.curLine);
+            //TODO:save content to database
             //notify other clients on the same room about the changes 
             const room = rooms[roomId];
             const payload = {
-                'method' : 'update',
+                'method' : 'updateText',
                 'text' : msg.text,
-                'line' : msg.clientCursor['line'],
-                'lastLine' : msg.lastLine
+                'curLine' : msg.curLine,
+                'lastLine' : msg.lastLine,
+                'editorId' : msg.editorId
             };
             Array.prototype.forEach.call(room.clients, element => {
-                console.log(element.clientId);
                 clients[element.clientId].connection.send(JSON.stringify(payload));
             });
+
+        //notify other clients over a changed cursor position
+        } else if (msg.method === 'updateCursor') {
+
         }
+
     });
 
     //when client disconnected, do..
