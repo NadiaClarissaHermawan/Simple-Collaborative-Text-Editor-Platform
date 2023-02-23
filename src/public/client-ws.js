@@ -35,7 +35,7 @@ ws.addEventListener('message', function message(data) {
         roomId = {
             'id' : resp.roomId,
             'creator' : 1,
-            'room':null
+            'room': resp.room
         };
         console.log('room successfully created with id ' + resp.roomId);
         btnJoin.click();
@@ -46,10 +46,13 @@ ws.addEventListener('message', function message(data) {
             alert('Wrong room code!');
         } else {
             roomId.room = resp.room;
+            //new client joins room
             if (resp.status === 0) {
                 moveToTextEditor();
+            //existing client inside the room gets informational update
             } else {
-                document.getElementById('clientCounter').textContent = 'clients connected : ' + roomId.room.clients.length + '';
+                createNewCursor(resp.clientId);
+                document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(resp.room.clients).length + '';
             }
         } 
     
@@ -59,7 +62,6 @@ ws.addEventListener('message', function message(data) {
 
         //new line
         if (lineDiv === null) {
-            console.log(resp.lastLine, resp.curLine, resp.text);
             createNewLine(resp.lastLine, resp.curLine, resp.text);
             clientCursor.maxLine = resp.curLine; 
 
@@ -73,6 +75,10 @@ ws.addEventListener('message', function message(data) {
             //first character typed, measure letter width
             if (letterWidth === 0.0) {
                 letterWidth = (textBounding.right - textBounding.left) / textElement.textContent.length;
+                console.log('letter width', letterWidth);
+            } else {
+                //TODO:HAPUS ELSE INI TESTER AJA
+                console.log('l width', ((textBounding.right - textBounding.left) / textElement.textContent.length));
             }
 
             //move ONLY client-editor's cursor position
@@ -80,14 +86,15 @@ ws.addEventListener('message', function message(data) {
                 clientCursor.caret += 1;
                 clientCursor.cursorX = textBounding.left + (letterWidth * clientCursor.caret);
                 clientCursor.cursorY = textBounding.y;
-                updateCursor();
-                updateTextareaCaret(textElement);
                 notifyCursorUpdate();
             }
         }
     
     // receive cursor position update
     } else if (resp.method === 'updateCursor') {
+        roomId.room.clients[resp.clientId].clientCursor = resp.clientCursor;
+        updateCursor(resp.clientId);
+        updateTextareaCaret(document.getElementById(resp.clientCursor.line).children[0].textContent, resp.clientCursor.caret);
 
     // someone disconnected
     } else if (resp.method === 'disconnect') {
@@ -101,7 +108,7 @@ ws.addEventListener('message', function message(data) {
 function createRoom (e) {
     if (roomId.creator !== -1) {
         const payLoad = {
-            'method': 'move'
+            'method' : 'move'
         };
         ws.send(JSON.stringify(payLoad));
     }
@@ -121,14 +128,14 @@ function joinRoom (e) {
         if (inputRoomId.value !== '' && roomId.creator !== 1) {
             if (roomId.creator !== -1) {
                 const payLoad = {
-                    'method': 'move'
+                    'method' : 'move'
                 };
                 ws.send(JSON.stringify(payLoad));
             }
             roomId = {
                 'id' : inputRoomId.value.trim(),
                 'creator' : 0,
-                'room':null
+                'room' : null
             };
         } 
 
@@ -165,14 +172,45 @@ function moveToTextEditor () {
     xhttp.onload = function () {
         document.getElementById('mainContainer').innerHTML = xhttp.responseText;
         document.getElementById('roomCode').textContent = 'Room id : ' + roomId.id;;
-        document.getElementById('clientCounter').textContent = 'clients connected : ' + roomId.room.clients.length + '';
+        document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(roomId.room.clients).length + '';
+
+        //create new cursor for this new client
+        createNewCursor(clientId);
+
+        //generate existing client's cursor 
+        for (const [key, value] of Object.entries(roomId.room.clients)) {
+            if (key !== clientId) {
+                createNewCursor(key);
+                updateCursor(key);
+
+                const text = document.getElementById(value.clientCursor['line']).children[0].textContent;
+                updateTextareaCaret(text, value.clientCursor['caret']);
+            }
+        }
+        //TODO:client yg baru join, gapunya cursor dari client" lain yg sdh ada di room tsb
+        //TODO:loop seluruh clients yg sdh ada di room tsb untuk create & munculin cursornya
     };
     xhttp.send();
 }
 
 
+//insert new client cursor
+function createNewCursor (cursorId) {
+    const cursorWrapper = document.createElement('div');
+    cursorWrapper.id = cursorId;
+    cursorWrapper.classList.add('none', 'cursor-wrapper');
+    const cursor = document.createElement('div');
+    cursor.classList.add('cursor');
+    cursor.innerHTML = '&nbsp';
+    cursorWrapper.appendChild(cursor);
+
+    const textareaWrapper = document.getElementById('textarea-wrapper');
+    textareaWrapper.parentNode.insertBefore(cursorWrapper, textareaWrapper);
+}
+
+
 //getting actual click position (line, caret, x coordinate) 
-function getClickPosition(event) {
+function getClickPosition (event) {
     const container = document.getElementById('text-presentation');
     let textBounding, clickedElement;
 
@@ -205,32 +243,31 @@ function getClickPosition(event) {
     } 
     clientCursor.cursorY = textBounding.y;
     
-    updateCursor();
-    updateTextareaCaret(clickedElement);
-    //TODO:add notifyCursorUpdate()
+    notifyCursorUpdate();
 }
 
 
 //update textarea selection range (caret)
-function updateTextareaCaret (clickedElement) {
+function updateTextareaCaret (text, caret) {
     //move focus to textarea 
     const textarea = document.getElementById('textarea');
-    textarea.value = clickedElement.textContent;
-    textarea.setSelectionRange(clientCursor.caret, clientCursor.caret);
+    textarea.value = text;
+    textarea.setSelectionRange(caret, caret);
     textarea.focus();
 };
 
 
 //update cursor's x and y
-function updateCursor () {
-    const cursor = document.getElementById('cursor-wrapper');
-    const c = document.getElementById('cursor');
+function updateCursor (cursorId) {
+    const cursorWrapper = document.getElementById(cursorId);
+    const cursor = cursorWrapper.children[0];
     const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
 
     //update cursor position
-    c.style.left = clientCursor.cursorX + "px";
-    c.style.top = (clientCursor.cursorY - wrapperBounding.y) + "px";
-    cursor.classList.remove('none');
+    const cursorPosition = roomId.room.clients[cursorId];
+    cursor.style.left = cursorPosition.clientCursor['cursorX'] + "px";
+    cursor.style.top = (cursorPosition.clientCursor['cursorY'] - wrapperBounding.y) + "px";
+    cursorWrapper.classList.remove('none');
 }
 
 
@@ -245,7 +282,7 @@ function receiveInput (event) {
         if ((textarea.value.length - 1) !== clientCursor.caret) {
             notifyTextUpdate(textarea.value.substring(0, clientCursor.caret), lastLine);
             textarea.value = textarea.value.substring(clientCursor.caret + 1);
-            //TODO:fix posisi cursor harusnya di paling kiri (depan), si caret harus diset gmn
+            clientCursor.caret = -2;
         //akhir line
         } else {
             textarea.value = "";
@@ -255,16 +292,6 @@ function receiveInput (event) {
         clientCursor.line = clientCursor.maxLine;
         createNewLine(lastLine, clientCursor.maxLine, textarea.value);
         notifyTextUpdate(textarea.value, lastLine);
-
-        //TODO:cek apakah comment kode dibawah masih diperlukan/tdk
-        //move cursor position
-        // let range = new Range();
-        // range.setStart(p.firstChild, 0);
-        // range.setEnd(p.querySelector('b').firstChild, 0);
-        // window.getSelection().removeAllRanges();
-        // window.getSelection().addRange(range);
-
-        // (document.getElementById(clientCursor.line).children[0]).click();
     
     //delete character
     } else if (event.key === 'Backspace') {
@@ -276,6 +303,7 @@ function receiveInput (event) {
     
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
+        console.log('input:'+textarea.value+'batas akhir');
         notifyTextUpdate(textarea.value, lastLine);
     }
 };
@@ -294,25 +322,23 @@ function createNewLine (lastLineId, curLineId, textValue) {
 }
 
 
-//notify server & other clients over a changed text
+//notify server over a changed text
 function notifyTextUpdate (text, lastLine) {
     const payload = {
         'method' : 'updateText',
         'text' : text,
         'curLine' : clientCursor.line,
-        'lastLine' : lastLine,
-        'editorId' : document.cookie.substring(9)
+        'lastLine' : lastLine
     };
     ws.send(JSON.stringify(payload));
 }
 
 
-//notify server & other clients over a changed cursor position
-function notifyCursorUpdate (text, lastLine) {
+//notify server over a changed cursor position
+function notifyCursorUpdate () {
     const payload = {
         'method' : 'updateCursor',
-        'clientCursor' : clientCursor,
-        'lastLine' : lastLine
+        'clientCursor' : clientCursor
     };
     ws.send(JSON.stringify(payload));
 }

@@ -2,12 +2,12 @@
     visibility: hidden;
 }
 
-#cursor-wrapper {
+.cursor-wrapper {
     z-index: 3;
     position: relative;
 }
 
-#cursor {
+.cursor {
     pointer-events: none;
     border-left: 1px solid black;
     position: absolute;
@@ -43,6 +43,6 @@
     display: block;
 }
 
-.line:first-child {
+.line span {
     font-family: monospace;
 }

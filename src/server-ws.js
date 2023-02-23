@@ -36,7 +36,7 @@ socket.on('connection', function connection(ws) {
             roomId = uuidv4();
             //TODO:note room's text editor first state -> database
             rooms[roomId] = {
-                'clients' : []
+                'clients' : {}
             };
 
             const payload = {
@@ -63,46 +63,56 @@ socket.on('connection', function connection(ws) {
                     'name' : msg.name,
                     'connection' : ws
                 };
-                //store client's last state at current room
-                room.clients.push({
-                    'clientId' : clientId
-                });
+                //store client's initial state at current room
+                room.clients[clientId] = {
+                    'clientCursor' : {
+                        'line' : 1,
+                        'caret' : 0,
+                        'maxLine' : 1,
+                        'cursorX' : 0,
+                        'cursorY' : 0
+                    }
+                };
+
                 payload = {
                     'method' : 'join',
                     'status' : 1,
-                    'room' : room
+                    'room' : room,
+                    'clientId' : clientId
                 };
                 const selfpayload = {
                     'method' : 'join',
                     'status' : 0,
                     'room' : room
                 };
+
                 //send room state through all clients
-                Array.prototype.forEach.call(room.clients, element => {
-                    if (element.clientId !== clientId) {
-                        clients[element.clientId].connection.send(JSON.stringify(payload));
+                for (const [key, value] of Object.entries(room.clients)) {
+                    if (key !== clientId) {
+                        clients[key].connection.send(JSON.stringify(payload));
                     } else {
-                        clients[element.clientId].connection.send(JSON.stringify(selfpayload));
-                    }
-                });
+                        clients[key].connection.send(JSON.stringify(selfpayload));
+                    } 
+                }
             }    
         
         //disconnect/move from room without quitting request    
+        //cuma kepake kalau di tampilan editor teksnya ada form join room & create room (skrg sih tdk digunakan)
         } else if (msg.method === 'move') {
             const room = rooms[roomId];
-            room.clients = room.clients.filter(o => o.clientId !== clientId);
+            delete room.clients[clientId];
             const payload = {
                 'method' : 'disconnect',
                 'room' : room 
             };
             //send room state through all clients
-            Array.prototype.forEach.call(room.clients, element => {
-                clients[element.clientId].connection.send(JSON.stringify(payload));
-            });
+            for (const [key, value] of Object.entries(room.clients)) {
+                clients[key].connection.send(JSON.stringify(payload));
+            }
 
         //notify other clients over a changed text  
         } else if (msg.method === 'updateText') {
-            console.log('client ' + msg.editorId + ' has made a change at line :' + msg.curLine);
+            console.log('client ' + clientId + ' has made a change at line :' + msg.curLine);
             //TODO:save content to database
             //notify other clients on the same room about the changes 
             const room = rooms[roomId];
@@ -111,15 +121,28 @@ socket.on('connection', function connection(ws) {
                 'text' : msg.text,
                 'curLine' : msg.curLine,
                 'lastLine' : msg.lastLine,
-                'editorId' : msg.editorId
+                'editorId' : clientId
             };
-            Array.prototype.forEach.call(room.clients, element => {
-                clients[element.clientId].connection.send(JSON.stringify(payload));
-            });
+            //send room state through all clients
+            for (const [key, value] of Object.entries(room.clients)) {
+                clients[key].connection.send(JSON.stringify(payload));
+            }
 
         //notify other clients over a changed cursor position
         } else if (msg.method === 'updateCursor') {
-
+            console.log('Cursor position updated by clientId:', clientId);
+            
+            const room = rooms[roomId];
+            room.clients[clientId].clientCursor = msg.clientCursor;
+            const payload = {
+                'method' : 'updateCursor',
+                'clientId' : clientId,
+                'clientCursor' : msg.clientCursor
+            };
+            //send room state through all clients
+            for (const [key, value] of Object.entries(room.clients)) {
+                clients[key].connection.send(JSON.stringify(payload));
+            }
         }
 
     });
@@ -132,10 +155,10 @@ socket.on('connection', function connection(ws) {
         if (roomId !== null) {
             console.log('client ' + clientId + ' disconnected from room ' + roomId);
             const room = rooms[roomId];
-            room.clients = room.clients.filter(o => o.clientId !== clientId);
+            delete room.clients[clientId];
 
             const payload = {
-                'method' : 'quit',
+                'method' : 'disconnect',
                 'clientId' : clientId,
                 'room' : room
             };
