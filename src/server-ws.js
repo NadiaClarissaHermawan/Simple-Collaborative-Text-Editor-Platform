@@ -129,6 +129,7 @@ socket.on('connection', function connection(ws) {
             }
 
         //notify other clients over a changed cursor position
+        //TODO:payloadnya jangan lg pake clientId dari si current client, krn yg bisa ubah posisi cursor 1 client bukan cmn client itu aja (bisa aja gegara client lain ngetik & geser posisi cursor client ini)
         } else if (msg.method === 'updateCursor') {
             console.log('Cursor position updated by clientId:', clientId);
             

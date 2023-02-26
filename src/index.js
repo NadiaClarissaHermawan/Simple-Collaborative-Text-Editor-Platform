@@ -22,7 +22,7 @@ app.use(express.static('public'));
 app.use(express.static('views'));
 
 //port
-app.listen(PORT, () => console.log('Server running at port ' + PORT + '.'));
+app.listen(PORT, () => console.log('Express running at port ' + PORT + '.'));
 
 
 

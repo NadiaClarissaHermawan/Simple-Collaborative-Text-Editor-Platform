@@ -70,22 +70,29 @@ ws.addEventListener('message', function message(data) {
             const textElement = lineDiv.children[0];
             textElement.textContent = resp.text;
             document.getElementById('textarea').value = resp.text;
-            const textBounding = textElement.getBoundingClientRect();
 
             //first character typed, measure letter width
             if (letterWidth === 0.0) {
+                const textBounding = textElement.getBoundingClientRect();
                 letterWidth = (textBounding.right - textBounding.left) / textElement.textContent.length;
                 console.log('letter width', letterWidth);
-            } else {
-                //TODO:HAPUS ELSE INI TESTER AJA
-                console.log('l width', ((textBounding.right - textBounding.left) / textElement.textContent.length));
             }
+
+            //check & move affected cursors
+            //TODO:CEKKK
+            // for (const [key, value] of Object.entries(roomId.room.clients)) {
+            //     //cursor di sebelah kanan/== dari caret yg diedit
+            //     if (value.clientCursor['line'] == resp.curLine && value.clientCursor['caret'] >= resp.caret) {
+            //         roomId.room.clients[key].clientCursor['caret'] += 1;
+            //         roomId.room.clients[key].clientCursor['line'] = resp.curLine;
+            //     }
+            //     console.log(value);
+            // } 
 
             //move ONLY client-editor's cursor position
             if (resp.editorId === document.cookie.substring(9)) {
                 clientCursor.caret += 1;
-                clientCursor.cursorX = textBounding.left + (letterWidth * clientCursor.caret);
-                clientCursor.cursorY = textBounding.y;
+                clientCursor.line = resp.curLine;
                 notifyCursorUpdate();
             }
         }
@@ -186,9 +193,7 @@ function moveToTextEditor () {
                 const text = document.getElementById(value.clientCursor['line']).children[0].textContent;
                 updateTextareaCaret(text, value.clientCursor['caret']);
             }
-        }
-        //TODO:client yg baru join, gapunya cursor dari client" lain yg sdh ada di room tsb
-        //TODO:loop seluruh clients yg sdh ada di room tsb untuk create & munculin cursornya
+        }    
     };
     xhttp.send();
 }
@@ -212,37 +217,29 @@ function createNewCursor (cursorId) {
 //getting actual click position (line, caret, x coordinate) 
 function getClickPosition (event) {
     const container = document.getElementById('text-presentation');
-    let textBounding, clickedElement;
+    let clickedElement;
 
     //container clicked
     if (event.target === container) {
         //move cursor to the last line & rightmost caret position in the line
         clickedElement = container.lastElementChild.children[0];
-        textBounding = clickedElement.getBoundingClientRect();
         clientCursor.line = clickedElement.parentNode.id;
-        clientCursor.cursorX = textBounding.right;
         clientCursor.caret = clickedElement.textContent.length;
     
     //existing line clicked
     } else {
         clickedElement = event.target;
-        textBounding = clickedElement.getBoundingClientRect();
         //text span 
         if (!clickedElement.classList.contains('line')) {
             clientCursor.line = clickedElement.parentNode.id;
             clientCursor.caret = window.getSelection().anchorOffset;
-            // console.log('span clicked', clientCursor.caret);
-            clientCursor.cursorX = textBounding.left + (letterWidth * clientCursor.caret);
         //div (span wrapper)
         } else {
             clientCursor.line = clickedElement.id;
             clickedElement = clickedElement.children[0];
             clientCursor.caret = clickedElement.textContent.length;
-            clientCursor.cursorX = clickedElement.getBoundingClientRect().right;
         }
     } 
-    clientCursor.cursorY = textBounding.y;
-    
     notifyCursorUpdate();
 }
 
@@ -264,9 +261,10 @@ function updateCursor (cursorId) {
     const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
 
     //update cursor position
-    const cursorPosition = roomId.room.clients[cursorId];
-    cursor.style.left = cursorPosition.clientCursor['cursorX'] + "px";
-    cursor.style.top = (cursorPosition.clientCursor['cursorY'] - wrapperBounding.y) + "px";
+    const cursorPosition = roomId.room.clients[cursorId].clientCursor;
+    const elementBounding = document.getElementById(cursorPosition['line']).children[0].getBoundingClientRect();
+    cursor.style.left = (elementBounding.left + (letterWidth * cursorPosition['caret'])) + "px";
+    cursor.style.top = (elementBounding.y - wrapperBounding.y) + "px";
     cursorWrapper.classList.remove('none');
 }
 
@@ -274,13 +272,13 @@ function updateCursor (cursorId) {
 //accept input from clients
 function receiveInput (event) {
     const textarea = document.getElementById('textarea');
-    const lastLine = clientCursor.line;
+    const editedLine = clientCursor.line;
 
     //adding new line div
     if (event.key === 'Enter') {
         //bukan di akhir line
         if ((textarea.value.length - 1) !== clientCursor.caret) {
-            notifyTextUpdate(textarea.value.substring(0, clientCursor.caret), lastLine);
+            notifyTextUpdate(textarea.value.substring(0, clientCursor.caret), editedLine);
             textarea.value = textarea.value.substring(clientCursor.caret + 1);
             clientCursor.caret = -2;
         //akhir line
@@ -290,8 +288,8 @@ function receiveInput (event) {
         }
         clientCursor.maxLine += 1;
         clientCursor.line = clientCursor.maxLine;
-        createNewLine(lastLine, clientCursor.maxLine, textarea.value);
-        notifyTextUpdate(textarea.value, lastLine);
+        createNewLine(editedLine, clientCursor.maxLine, textarea.value);
+        notifyTextUpdate(textarea.value, editedLine);
     
     //delete character
     } else if (event.key === 'Backspace') {
@@ -303,8 +301,7 @@ function receiveInput (event) {
     
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
-        console.log('input:'+textarea.value+'batas akhir');
-        notifyTextUpdate(textarea.value, lastLine);
+        notifyTextUpdate(textarea.value, editedLine);
     }
 };
 
@@ -328,17 +325,20 @@ function notifyTextUpdate (text, lastLine) {
         'method' : 'updateText',
         'text' : text,
         'curLine' : clientCursor.line,
-        'lastLine' : lastLine
+        'lastLine' : lastLine,
+        'caret' : clientCursor.caret
     };
     ws.send(JSON.stringify(payload));
 }
 
 
 //notify server over a changed cursor position
-function notifyCursorUpdate () {
+//TODO:benerin semua yg panggil method notifyCursorUpdate ini, krn baru tambah parameter
+function notifyCursorUpdate (cursorId) {
     const payload = {
         'method' : 'updateCursor',
-        'clientCursor' : clientCursor
+        'clientCursor' : clientCursor,
+        'cursorId' : cursorId
     };
     ws.send(JSON.stringify(payload));
 }
