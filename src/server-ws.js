@@ -69,8 +69,7 @@ socket.on('connection', function connection(ws) {
                         'line' : 1,
                         'caret' : 0,
                         'maxLine' : 1,
-                        'cursorX' : 0,
-                        'cursorY' : 0
+                        'status' : 0
                     }
                 };
 
@@ -129,23 +128,41 @@ socket.on('connection', function connection(ws) {
             }
 
         //notify other clients over a changed cursor position
-        //TODO:payloadnya jangan lg pake clientId dari si current client, krn yg bisa ubah posisi cursor 1 client bukan cmn client itu aja (bisa aja gegara client lain ngetik & geser posisi cursor client ini)
         } else if (msg.method === 'updateCursor') {
-            console.log('Cursor position updated by clientId:', clientId);
+            console.log('Cursor position updated by clientId:', msg.cursorId);
             
             const room = rooms[roomId];
-            room.clients[clientId].clientCursor = msg.clientCursor;
+            const update = room.clients[msg.cursorId].clientCursor;
+            update['line'] = msg.line;
+            update['caret'] = msg.caret;
+            update['status'] = msg.status;
             const payload = {
                 'method' : 'updateCursor',
-                'clientId' : clientId,
-                'clientCursor' : msg.clientCursor
+                'cursorId' : msg.cursorId,
+                'clientCursor' : update
             };
+
             //send room state through all clients
             for (const [key, value] of Object.entries(room.clients)) {
                 clients[key].connection.send(JSON.stringify(payload));
+
+                //check & move affected cursors (from update text)
+                if (msg.code === 1 && key !== msg.cursorId && value.clientCursor['line'] === update['line'] && value.clientCursor['status'] === 1
+                && value.clientCursor['caret'] >= (update['caret'] - 1)) {
+                    let up = room.clients[key].clientCursor;
+                    up['caret'] += 1;
+                    let payload2 = {
+                        'method' : 'updateCursor',
+                        'cursorId' : key,
+                        'clientCursor' : up
+                    };
+
+                    for (const [key, value] of Object.entries(room.clients)) {
+                        clients[key].connection.send(JSON.stringify(payload2));
+                    }
+                }
             }
         }
-
     });
 
     //when client disconnected, do..
@@ -164,9 +181,9 @@ socket.on('connection', function connection(ws) {
                 'room' : room
             };
             //send room state through all clients
-            Array.prototype.forEach.call(room.clients, element => {
-                clients[element.clientId].connection.send(JSON.stringify(payload));
-            });
+            for (const [key, value] of Object.entries(room.clients)) {
+                clients[key].connection.send(JSON.stringify(payload2));
+            }
         }
     });
 });

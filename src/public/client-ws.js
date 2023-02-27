@@ -4,17 +4,10 @@ let ws = new WebSocket('ws://localhost:81');
 
 //global attributes
 let clientId = null;
-let roomId = {
+let curRoom = {
     'id' : null,
     'creator' : -1, //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
     'room' : null
-};
-let clientCursor = {
-    'line' : 1,
-    'caret' : 0,
-    'maxLine' : 1,
-    'cursorX' : 0,
-    'cursorY' : 0
 };
 let letterWidth = 0.0;
 
@@ -32,7 +25,7 @@ ws.addEventListener('message', function message(data) {
 
     //create
     } else if (resp.method === 'create') {
-        roomId = {
+        curRoom = {
             'id' : resp.roomId,
             'creator' : 1,
             'room': resp.room
@@ -45,7 +38,7 @@ ws.addEventListener('message', function message(data) {
         if (resp.status === -1) {
             alert('Wrong room code!');
         } else {
-            roomId.room = resp.room;
+            curRoom.room = resp.room;
             //new client joins room
             if (resp.status === 0) {
                 moveToTextEditor();
@@ -63,8 +56,7 @@ ws.addEventListener('message', function message(data) {
         //new line
         if (lineDiv === null) {
             createNewLine(resp.lastLine, resp.curLine, resp.text);
-            clientCursor.maxLine = resp.curLine; 
-
+            curRoom.room.clients[document.cookie.substring(9)].clientCursor['maxLine'] = resp.curLine;
         //receive changes on existing line & make it visible
         } else {
             const textElement = lineDiv.children[0];
@@ -75,33 +67,21 @@ ws.addEventListener('message', function message(data) {
             if (letterWidth === 0.0) {
                 const textBounding = textElement.getBoundingClientRect();
                 letterWidth = (textBounding.right - textBounding.left) / textElement.textContent.length;
-                console.log('letter width', letterWidth);
             }
-
-            //check & move affected cursors
-            //TODO:CEKKK
-            // for (const [key, value] of Object.entries(roomId.room.clients)) {
-            //     //cursor di sebelah kanan/== dari caret yg diedit
-            //     if (value.clientCursor['line'] == resp.curLine && value.clientCursor['caret'] >= resp.caret) {
-            //         roomId.room.clients[key].clientCursor['caret'] += 1;
-            //         roomId.room.clients[key].clientCursor['line'] = resp.curLine;
-            //     }
-            //     console.log(value);
-            // } 
-
             //move ONLY client-editor's cursor position
             if (resp.editorId === document.cookie.substring(9)) {
-                clientCursor.caret += 1;
-                clientCursor.line = resp.curLine;
-                notifyCursorUpdate();
+                const cCursor = curRoom.room.clients[resp.editorId].clientCursor;
+                cCursor['caret'] += 1;
+                cCursor['line'] = resp.curLine;
+                notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1, 1);
             }
         }
     
     // receive cursor position update
     } else if (resp.method === 'updateCursor') {
-        roomId.room.clients[resp.clientId].clientCursor = resp.clientCursor;
-        updateCursor(resp.clientId);
-        updateTextareaCaret(document.getElementById(resp.clientCursor.line).children[0].textContent, resp.clientCursor.caret);
+        curRoom.room.clients[resp.cursorId].clientCursor = resp.clientCursor;
+        updateCursor(resp.cursorId);
+        updateTextareaCaret(document.getElementById(resp.clientCursor['line']).children[0].textContent, resp.clientCursor['caret']);
 
     // someone disconnected
     } else if (resp.method === 'disconnect') {
@@ -113,7 +93,7 @@ ws.addEventListener('message', function message(data) {
 
 //create room button
 function createRoom (e) {
-    if (roomId.creator !== -1) {
+    if (curRoom.creator !== -1) {
         const payLoad = {
             'method' : 'move'
         };
@@ -132,14 +112,14 @@ function joinRoom (e) {
     const name = document.getElementById('name').value;
     const inputRoomId = document.getElementById('roomId');
     if (nameCheck(name)) {
-        if (inputRoomId.value !== '' && roomId.creator !== 1) {
-            if (roomId.creator !== -1) {
+        if (inputRoomId.value !== '' && curRoom.creator !== 1) {
+            if (curRoom.creator !== -1) {
                 const payLoad = {
                     'method' : 'move'
                 };
                 ws.send(JSON.stringify(payLoad));
             }
-            roomId = {
+            curRoom = {
                 'id' : inputRoomId.value.trim(),
                 'creator' : 0,
                 'room' : null
@@ -150,7 +130,7 @@ function joinRoom (e) {
         const payload = {
             'method': 'join',
             'name': 'name',
-            'roomId' : roomId.id
+            'roomId' : curRoom.id
         };
         ws.send(JSON.stringify(payload));
     }
@@ -178,18 +158,17 @@ function moveToTextEditor () {
     xhttp.open('GET', '/texteditor', true);
     xhttp.onload = function () {
         document.getElementById('mainContainer').innerHTML = xhttp.responseText;
-        document.getElementById('roomCode').textContent = 'Room id : ' + roomId.id;;
-        document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(roomId.room.clients).length + '';
+        document.getElementById('roomCode').textContent = 'Room id : ' + curRoom.id;;
+        document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(curRoom.room.clients).length + '';
 
         //create new cursor for this new client
         createNewCursor(clientId);
 
         //generate existing client's cursor 
-        for (const [key, value] of Object.entries(roomId.room.clients)) {
+        for (const [key, value] of Object.entries(curRoom.room.clients)) {
             if (key !== clientId) {
                 createNewCursor(key);
                 updateCursor(key);
-
                 const text = document.getElementById(value.clientCursor['line']).children[0].textContent;
                 updateTextareaCaret(text, value.clientCursor['caret']);
             }
@@ -204,6 +183,7 @@ function createNewCursor (cursorId) {
     const cursorWrapper = document.createElement('div');
     cursorWrapper.id = cursorId;
     cursorWrapper.classList.add('none', 'cursor-wrapper');
+
     const cursor = document.createElement('div');
     cursor.classList.add('cursor');
     cursor.innerHTML = '&nbsp';
@@ -217,30 +197,31 @@ function createNewCursor (cursorId) {
 //getting actual click position (line, caret, x coordinate) 
 function getClickPosition (event) {
     const container = document.getElementById('text-presentation');
+    let line, caret;
     let clickedElement;
 
     //container clicked
     if (event.target === container) {
         //move cursor to the last line & rightmost caret position in the line
         clickedElement = container.lastElementChild.children[0];
-        clientCursor.line = clickedElement.parentNode.id;
-        clientCursor.caret = clickedElement.textContent.length;
+        line = clickedElement.parentNode.id;
+        caret = clickedElement.textContent.length;
     
     //existing line clicked
     } else {
         clickedElement = event.target;
-        //text span 
+        //text pre
         if (!clickedElement.classList.contains('line')) {
-            clientCursor.line = clickedElement.parentNode.id;
-            clientCursor.caret = window.getSelection().anchorOffset;
-        //div (span wrapper)
+            line = clickedElement.parentNode.id;
+            caret = window.getSelection().anchorOffset;
+        //div (pre wrapper)
         } else {
-            clientCursor.line = clickedElement.id;
+            line = clickedElement.id;
             clickedElement = clickedElement.children[0];
-            clientCursor.caret = clickedElement.textContent.length;
+            caret = clickedElement.textContent.length;
         }
     } 
-    notifyCursorUpdate();
+    notifyCursorUpdate(document.cookie.substring(9), line, caret, 1, 0);
 }
 
 
@@ -256,48 +237,68 @@ function updateTextareaCaret (text, caret) {
 
 //update cursor's x and y
 function updateCursor (cursorId) {
-    const cursorWrapper = document.getElementById(cursorId);
-    const cursor = cursorWrapper.children[0];
-    const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
+    if (curRoom.room.clients[cursorId].clientCursor['status'] === 1) {
+        const cursorWrapper = document.getElementById(cursorId);
+        const cursor = cursorWrapper.children[0];
+        const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
+    
+        //update cursor position
+        const cursorPosition = curRoom.room.clients[cursorId].clientCursor;
+        const elementBounding = document.getElementById(cursorPosition['line']).children[0].getBoundingClientRect();
+        cursor.style.left = (elementBounding.left + (letterWidth * cursorPosition['caret'])) + "px";
+        cursor.style.top = (elementBounding.y - wrapperBounding.y) + "px";
 
-    //update cursor position
-    const cursorPosition = roomId.room.clients[cursorId].clientCursor;
-    const elementBounding = document.getElementById(cursorPosition['line']).children[0].getBoundingClientRect();
-    cursor.style.left = (elementBounding.left + (letterWidth * cursorPosition['caret'])) + "px";
-    cursor.style.top = (elementBounding.y - wrapperBounding.y) + "px";
-    cursorWrapper.classList.remove('none');
+        if (cursorWrapper.classList.contains('none')) {
+            cursorWrapper.classList.remove('none');
+        }
+    }
 }
 
 
 //accept input from clients
 function receiveInput (event) {
     const textarea = document.getElementById('textarea');
-    const editedLine = clientCursor.line;
+    const cCursor = curRoom.room.clients[document.cookie.substring(9)].clientCursor;
+    const editedLine = cCursor['line'];
 
     //adding new line div
     if (event.key === 'Enter') {
         //bukan di akhir line
-        if ((textarea.value.length - 1) !== clientCursor.caret) {
-            notifyTextUpdate(textarea.value.substring(0, clientCursor.caret), editedLine);
-            textarea.value = textarea.value.substring(clientCursor.caret + 1);
-            clientCursor.caret = -2;
+        if ((textarea.value.length - 1) !== cCursor['caret']) {
+            notifyTextUpdate(textarea.value.substring(0, cCursor['caret']), editedLine);
+            textarea.value = textarea.value.substring(cCursor['caret'] + 1);
+            cCursor['caret'] = -2;
         //akhir line
         } else {
             textarea.value = "";
-            clientCursor.caret = -1;
+            cCursor['caret'] = -1;
         }
-        clientCursor.maxLine += 1;
-        clientCursor.line = clientCursor.maxLine;
-        createNewLine(editedLine, clientCursor.maxLine, textarea.value);
+        cCursor['maxLine'] += 1;
+        cCursor['line'] = cCursor['maxLine'];
+        createNewLine(editedLine, cCursor['maxLine'], textarea.value);
         notifyTextUpdate(textarea.value, editedLine);
+        //TODO: kalau pindah line, kursor yg ada di sblah kanan stay disana (ngambang)FIX
     
     //delete character
+    //TODO:IMPLEMENT
     } else if (event.key === 'Backspace') {
         console.log('back');
     
     //uppercase 
-    } else if (event.key === 'CapsLock'){
-        console.log('capslock');
+    } else if (event.key === 'CapsLock' || event.key === 'Shift'){
+        event.preventDefault();
+
+    //left
+    } else if (event.key === 'ArrowLeft') {
+
+    //right
+    } else if (event.key === 'ArrowRight') {
+
+    //up
+    } else if (event.key === 'ArrowUp') {
+
+    //down
+    } else if (event.key === 'ArrowDown') {
     
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
@@ -310,35 +311,38 @@ function receiveInput (event) {
 function createNewLine (lastLineId, curLineId, textValue) {
     const lastLineDiv = document.getElementById(lastLineId);
     const lineDiv = document.createElement('div');
-    const lineSpan = document.createElement('span');
+    const linePre = document.createElement('pre');
+    linePre.textContent = textValue;
     lineDiv.id = curLineId;
     lineDiv.classList.add('line');
-    lineSpan.textContent = textValue;
-    lineDiv.appendChild(lineSpan);
+    lineDiv.appendChild(linePre);
     lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
 }
 
 
 //notify server over a changed text
 function notifyTextUpdate (text, lastLine) {
+    const cCursor = curRoom.room.clients[document.cookie.substring(9)].clientCursor;
     const payload = {
         'method' : 'updateText',
         'text' : text,
-        'curLine' : clientCursor.line,
+        'curLine' : cCursor['line'],
         'lastLine' : lastLine,
-        'caret' : clientCursor.caret
+        'caret' : cCursor['caret']
     };
     ws.send(JSON.stringify(payload));
 }
 
 
 //notify server over a changed cursor position
-//TODO:benerin semua yg panggil method notifyCursorUpdate ini, krn baru tambah parameter
-function notifyCursorUpdate (cursorId) {
+function notifyCursorUpdate (cursorId, line, caret, status, code) {
     const payload = {
         'method' : 'updateCursor',
-        'clientCursor' : clientCursor,
-        'cursorId' : cursorId
+        'cursorId' : cursorId,
+        'line' : line,
+        'caret' : caret,
+        'status' : status,
+        'code' : code //nunjukin cursor diupdate karena apa, 0 = klik event, 1 = pergeseran krn ada yg ngetik
     };
     ws.send(JSON.stringify(payload));
 }

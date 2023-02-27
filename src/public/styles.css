@@ -45,6 +45,7 @@
     display: block;
 }
 
-.line span {
+.line pre {
     font-family: monospace;
+    display: inline;
 }
