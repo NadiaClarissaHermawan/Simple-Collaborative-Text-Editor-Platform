@@ -36,7 +36,9 @@ socket.on('connection', function connection(ws) {
             roomId = uuidv4();
             //TODO:note room's text editor first state -> database
             rooms[roomId] = {
-                'clients' : {}
+                'clients' : {},
+                'lines' : {},
+                'maxLine' : 1
             };
 
             const payload = {
@@ -60,15 +62,15 @@ socket.on('connection', function connection(ws) {
             } else {
                 //store client's active status
                 clients[clientId] = {
-                    'name' : msg.name,
                     'connection' : ws
                 };
                 //store client's initial state at current room
                 room.clients[clientId] = {
+                    'name' : msg.name,
                     'clientCursor' : {
                         'line' : 1,
                         'caret' : 0,
-                        'maxLine' : 1,
+                        'color' : "0",
                         'status' : 0
                     }
                 };
@@ -111,18 +113,26 @@ socket.on('connection', function connection(ws) {
 
         //notify other clients over a changed text  
         } else if (msg.method === 'updateText') {
+            //TODO:hapus tester console log
+            console.log(JSON.stringify(rooms[roomId], null, 2));
             console.log('client ' + clientId + ' has made a change at line :' + msg.curLine);
             //TODO:save content to database
             //notify other clients on the same room about the changes 
             const room = rooms[roomId];
+            if (msg.lastLine !== msg.curLine) {
+                room.maxLine = msg.curLine;
+            }
             const payload = {
                 'method' : 'updateText',
                 'text' : msg.text,
                 'curLine' : msg.curLine,
                 'lastLine' : msg.lastLine,
-                'editorId' : clientId
+                'caret' : msg.caret,
+                'editorId' : clientId, 
+                'maxLine' : room.maxLine
             };
             //send room state through all clients
+
             for (const [key, value] of Object.entries(room.clients)) {
                 clients[key].connection.send(JSON.stringify(payload));
             }
@@ -146,9 +156,21 @@ socket.on('connection', function connection(ws) {
             for (const [key, value] of Object.entries(room.clients)) {
                 clients[key].connection.send(JSON.stringify(payload));
 
-                //check & move affected cursors (from update text)
+                //check & move editable affected cursors (from update text)
                 if (msg.code === 1 && key !== msg.cursorId && value.clientCursor['line'] === update['line'] && value.clientCursor['status'] === 1
                 && value.clientCursor['caret'] >= (update['caret'] - 1)) {
+                    // //same line, a letter typed
+                    // if () {
+
+                    // //line differ by 1 (enter)     
+                    // } else if () {
+
+                    // // same line, backspace 
+                    // } else if () {
+
+                    // }
+                    console.log('affected in server', 'lineEditor:', msg.line, 'lineOtherClient:', value.clientCursor['line']);
+                    console.log('affected in server', 'affected client id:', key, 'caretEditor:', msg.caret, 'caretOtherClient:', value.clientCursor['caret']);
                     let up = room.clients[key].clientCursor;
                     up['caret'] += 1;
                     let payload2 = {
@@ -159,8 +181,8 @@ socket.on('connection', function connection(ws) {
 
                     for (const [key, value] of Object.entries(room.clients)) {
                         clients[key].connection.send(JSON.stringify(payload2));
-                    }
-                }
+                    }     
+                } 
             }
         }
     });
@@ -182,7 +204,7 @@ socket.on('connection', function connection(ws) {
             };
             //send room state through all clients
             for (const [key, value] of Object.entries(room.clients)) {
-                clients[key].connection.send(JSON.stringify(payload2));
+                clients[key].connection.send(JSON.stringify(payload));
             }
         }
     });

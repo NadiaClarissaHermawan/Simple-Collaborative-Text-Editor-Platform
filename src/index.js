@@ -7,9 +7,12 @@ import socket from "./server-ws.js";
 //import router
 import Router from "./routes.js";
 
+//import mongoose 
+import "./utils/db.js";
+
 //init express
 const app = express();
-const PORT = 80;
+const EXPRESS_PORT = 80;
 
 //use router middleware
 app.use(Router);
@@ -22,7 +25,7 @@ app.use(express.static('public'));
 app.use(express.static('views'));
 
 //port
-app.listen(PORT, () => console.log('Express running at port ' + PORT + '.'));
+app.listen(EXPRESS_PORT, () => console.log('Express running at port ' + EXPRESS_PORT + '.'));
 
 
 

@@ -1,9 +1,8 @@
 //connect to server
-//TODO:kalo pas hosting, localhost ganti jadi ip address dari si hostnya
+//TODO:kalo pas hosting, localhost ganti jadi ip address dari si hostnya (tp ws:// hrs ttep ada)
 let ws = new WebSocket('ws://localhost:81');
 
 //global attributes
-let clientId = null;
 let curRoom = {
     'id' : null,
     'creator' : -1, //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
@@ -17,11 +16,14 @@ ws.addEventListener('message', function message(data) {
 
     //connect
     if (resp.method === 'connect') {
-        document.cookie = "clientId=" + resp.clientId;
-        clientId = resp.clientId;
+        //simpan cookie object
+        const obj = {
+            'clientId' : resp.clientId
+        };
+        document.cookie = JSON.stringify(obj);
+        
         //retrieve cookie value example
-        const test = document.cookie.substring(9);
-        console.log('client id set successfully ' + test);
+        console.log('client id set successfully ' + JSON.parse(document.cookie)['clientId']);
 
     //create
     } else if (resp.method === 'create') {
@@ -52,11 +54,11 @@ ws.addEventListener('message', function message(data) {
     // receive text update 
     } else if (resp.method === 'updateText') {
         const lineDiv = document.getElementById(resp.curLine);
+        curRoom.room.maxLine = resp.maxLine;
 
         //new line
         if (lineDiv === null) {
             createNewLine(resp.lastLine, resp.curLine, resp.text);
-            curRoom.room.clients[document.cookie.substring(9)].clientCursor['maxLine'] = resp.curLine;
         //receive changes on existing line & make it visible
         } else {
             const textElement = lineDiv.children[0];
@@ -69,7 +71,7 @@ ws.addEventListener('message', function message(data) {
                 letterWidth = (textBounding.right - textBounding.left) / textElement.textContent.length;
             }
             //move ONLY client-editor's cursor position
-            if (resp.editorId === document.cookie.substring(9)) {
+            if (resp.editorId === JSON.parse(document.cookie)['clientId']) {
                 const cCursor = curRoom.room.clients[resp.editorId].clientCursor;
                 cCursor['caret'] += 1;
                 cCursor['line'] = resp.curLine;
@@ -81,12 +83,14 @@ ws.addEventListener('message', function message(data) {
     } else if (resp.method === 'updateCursor') {
         curRoom.room.clients[resp.cursorId].clientCursor = resp.clientCursor;
         updateCursor(resp.cursorId);
-        updateTextareaCaret(document.getElementById(resp.clientCursor['line']).children[0].textContent, resp.clientCursor['caret']);
-
+        if (JSON.parse(document.cookie)['clientId'] === resp.cursorId) {
+            updateTextareaCaret(document.getElementById(resp.clientCursor['line']).children[0].textContent, resp.clientCursor['caret']);
+        }
+        
     // someone disconnected
     } else if (resp.method === 'disconnect') {
         clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
-        console.log('client id ' + clientId + ' has disconnected.');
+        console.log('client id ' + JSON.parse(document.cookie)['clientId'] + ' has disconnected.');
     }
 });
 
@@ -129,7 +133,7 @@ function joinRoom (e) {
         inputRoomId.value = "";
         const payload = {
             'method': 'join',
-            'name': 'name',
+            'name': name,
             'roomId' : curRoom.id
         };
         ws.send(JSON.stringify(payload));
@@ -162,11 +166,11 @@ function moveToTextEditor () {
         document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(curRoom.room.clients).length + '';
 
         //create new cursor for this new client
-        createNewCursor(clientId);
+        createNewCursor(JSON.parse(document.cookie)['clientId']);
 
         //generate existing client's cursor 
         for (const [key, value] of Object.entries(curRoom.room.clients)) {
-            if (key !== clientId) {
+            if (key !== JSON.parse(document.cookie)['clientId']) {
                 createNewCursor(key);
                 updateCursor(key);
                 const text = document.getElementById(value.clientCursor['line']).children[0].textContent;
@@ -221,7 +225,7 @@ function getClickPosition (event) {
             caret = clickedElement.textContent.length;
         }
     } 
-    notifyCursorUpdate(document.cookie.substring(9), line, caret, 1, 0);
+    notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1, 0);
 }
 
 
@@ -258,14 +262,14 @@ function updateCursor (cursorId) {
 //accept input from clients
 function receiveInput (event) {
     const textarea = document.getElementById('textarea');
-    const cCursor = curRoom.room.clients[document.cookie.substring(9)].clientCursor;
+    const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].clientCursor;
     const editedLine = cCursor['line'];
 
     //adding new line div
     if (event.key === 'Enter') {
         //bukan di akhir line
         if ((textarea.value.length - 1) !== cCursor['caret']) {
-            notifyTextUpdate(textarea.value.substring(0, cCursor['caret']), editedLine);
+            notifyTextUpdate(textarea.value.substring(0, cCursor['caret']), editedLine, editedLine, cCursor['caret']);
             textarea.value = textarea.value.substring(cCursor['caret'] + 1);
             cCursor['caret'] = -2;
         //akhir line
@@ -273,11 +277,9 @@ function receiveInput (event) {
             textarea.value = "";
             cCursor['caret'] = -1;
         }
-        cCursor['maxLine'] += 1;
-        cCursor['line'] = cCursor['maxLine'];
-        createNewLine(editedLine, cCursor['maxLine'], textarea.value);
-        notifyTextUpdate(textarea.value, editedLine);
-        //TODO: kalau pindah line, kursor yg ada di sblah kanan stay disana (ngambang)FIX
+        cCursor['line'] = curRoom.room.maxLine + 1;
+        createNewLine(editedLine, cCursor['line'], textarea.value);
+        notifyTextUpdate(textarea.value, editedLine, cCursor['line'], cCursor['caret']);
     
     //delete character
     //TODO:IMPLEMENT
@@ -302,7 +304,7 @@ function receiveInput (event) {
     
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
-        notifyTextUpdate(textarea.value, editedLine);
+        notifyTextUpdate(textarea.value, editedLine, editedLine, cCursor['caret']);
     }
 };
 
@@ -321,14 +323,13 @@ function createNewLine (lastLineId, curLineId, textValue) {
 
 
 //notify server over a changed text
-function notifyTextUpdate (text, lastLine) {
-    const cCursor = curRoom.room.clients[document.cookie.substring(9)].clientCursor;
+function notifyTextUpdate (text, lastLine, curLine, caret) {
     const payload = {
         'method' : 'updateText',
         'text' : text,
-        'curLine' : cCursor['line'],
+        'curLine' : curLine,
         'lastLine' : lastLine,
-        'caret' : cCursor['caret']
+        'caret' : caret
     };
     ws.send(JSON.stringify(payload));
 }
