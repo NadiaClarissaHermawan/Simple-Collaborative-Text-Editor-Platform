@@ -5,19 +5,24 @@ import e from 'express';
 import { v4 as uuidv4 } from 'uuid';
 //import ws 
 import { WebSocketServer } from 'ws';
+//import mongoose
+import mongoose from 'mongoose';
+//import Room.js (Mongoose Schema Model)
+import Room from './models/room.js';
 
 //initialize server & websocket for server
 const socket = new WebSocketServer({ port : 81 });
 
 //hashmap of clients connected & rooms available
 const clients = {};
-const rooms = {};
 
 //when client connect, do..
 socket.on('connection', function connection(ws) {
     //generate unique clientId
-    let clientId = uuidv4();
+    let clientId = new mongoose.Types.ObjectId().toString();
+    //TODO:roomID gaperlu disimpen terpisah lagi, bisa ambil dari si roomData
     let roomId = null;
+    let roomData = null;
 
     //send connect response back to client
     //TODO: erase client id from payload -> change cookies
@@ -33,69 +38,47 @@ socket.on('connection', function connection(ws) {
         
         //create room request
         if (msg.method === 'create') {
-            roomId = uuidv4();
-            //TODO:note room's text editor first state -> database
-            rooms[roomId] = {
-                'clients' : {},
-                'lines' : {},
-                'maxLine' : 1
-            };
+            createRoom().then((newRoom) => {
+                roomData = newRoom;
+                roomId = newRoom['_id'].toString();
 
-            const payload = {
-                'method' : 'create',
-                'roomId' : roomId,
-                'room' : rooms[roomId]
-            };
-            ws.send(JSON.stringify(payload));
-        
-        //join room request
-        } else if (msg.method === 'join') {
-            roomId = msg.roomId;
-            const room = rooms[roomId];
-            let payload;
-            if (room === undefined) {
-                payload = {
-                    'method' : 'join',
-                    'status' : -1
+                const payload = {
+                    'method' : 'create',
+                    'roomId' : roomId
                 };
                 ws.send(JSON.stringify(payload));
-            } else {
-                //store client's active status
-                clients[clientId] = {
-                    'connection' : ws
-                };
-                //store client's initial state at current room
-                room.clients[clientId] = {
-                    'name' : msg.name,
-                    'clientCursor' : {
-                        'line' : 1,
-                        'caret' : 0,
-                        'color' : "0",
-                        'status' : 0
-                    }
-                };
+            });
 
-                payload = {
-                    'method' : 'join',
-                    'status' : 1,
-                    'room' : room,
-                    'clientId' : clientId
-                };
-                const selfpayload = {
-                    'method' : 'join',
-                    'status' : 0,
-                    'room' : room
-                };
+        //join room request
+        } else if (msg.method === 'join') {
+            getRoom(msg.roomId).then((room) => {
+                if (room === null) {
+                    const payload = {
+                        'method' : 'join',
+                        'status' : -1
+                    };
+                    ws.send(JSON.stringify(payload));
+                } else {
+                    roomData = room;
+                    roomId = room['_id'].toString();
+                    clients[clientId] = {
+                        'connection' : ws
+                    };
+                    joinRoom(clientId, msg.name, roomData);
 
-                //send room state through all clients
-                for (const [key, value] of Object.entries(room.clients)) {
-                    if (key !== clientId) {
-                        clients[key].connection.send(JSON.stringify(payload));
-                    } else {
-                        clients[key].connection.send(JSON.stringify(selfpayload));
-                    } 
+                    const payload = {
+                        'method' : 'join',
+                        'status' : 0,
+                        'room' : room,
+                        'newClient_Id' : clientId
+                    };
+                    ws.send(JSON.stringify(payload));
+                    
+                    //broadcast
+                    payload['status'] = 1;
+                    broadcast(payload, roomData.clients, false, clientId);
                 }
-            }    
+            });
         
         //disconnect/move from room without quitting request    
         //cuma kepake kalau di tampilan editor teksnya ada form join room & create room (skrg sih tdk digunakan)
@@ -106,16 +89,12 @@ socket.on('connection', function connection(ws) {
                 'method' : 'disconnect',
                 'room' : room 
             };
-            //send room state through all clients
-            for (const [key, value] of Object.entries(room.clients)) {
-                clients[key].connection.send(JSON.stringify(payload));
-            }
+            //broadcast 
+            broadcast(payload, roomData.clients, true, clientId);
 
         //notify other clients over a changed text  
         } else if (msg.method === 'updateText') {
-            //TODO:hapus tester console log
-            console.log(JSON.stringify(rooms[roomId], null, 2));
-            console.log('client ' + clientId + ' has made a change at line :' + msg.curLine);
+            
             //TODO:save content to database
             //notify other clients on the same room about the changes 
             const room = rooms[roomId];
@@ -209,6 +188,66 @@ socket.on('connection', function connection(ws) {
         }
     });
 });
-
 //export websocker server
 export default socket;
+
+
+//create new room
+async function createRoom () {
+    const roomData = {
+        _id : new mongoose.Types.ObjectId(),
+        maxLine : 1,
+        clients : {},
+        lines : {}
+    };
+    try {
+        await Room.create(roomData);
+        return roomData;
+    } catch (err) {
+        console.log('Error', err);
+    }
+}
+
+
+//get existing room data
+async function getRoom (roomId) {
+    if (mongoose.Types.ObjectId.isValid(roomId)) {
+        try {
+            const roomObjId = mongoose.Types.ObjectId.createFromHexString(roomId);
+            return await Room.findById(roomObjId);
+        } catch (err) {
+            console.log('Error', err);
+        }
+    } else {
+        return null;
+    }
+    
+}
+
+
+//join room
+async function joinRoom (clientId, name, roomData) {
+    //store client's initial state at current room to DB
+    roomData.clients.set(clientId, {
+        name : name,
+        cursor : {
+            'line' : 1,
+            'caret' : 0,
+            'color' : "0",
+            'status' : 0
+        }
+    });
+    roomData.save();
+}
+
+
+//broadcast
+function broadcast (payload, target, self, editorId) {
+    for (const [key, value] of target) {
+        if (!self && key == editorId) {
+            continue;
+        } else {
+            clients[key].connection.send(JSON.stringify(payload));
+        }
+    }
+}

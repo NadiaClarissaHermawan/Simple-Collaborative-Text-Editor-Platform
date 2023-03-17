@@ -30,7 +30,7 @@ ws.addEventListener('message', function message(data) {
         curRoom = {
             'id' : resp.roomId,
             'creator' : 1,
-            'room': resp.room
+            'room': null
         };
         console.log('room successfully created with id ' + resp.roomId);
         btnJoin.click();
@@ -46,7 +46,7 @@ ws.addEventListener('message', function message(data) {
                 moveToTextEditor();
             //existing client inside the room gets informational update
             } else {
-                createNewCursor(resp.clientId);
+                createNewCursor(resp.newClient_Id);
                 document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(resp.room.clients).length + '';
             }
         } 
