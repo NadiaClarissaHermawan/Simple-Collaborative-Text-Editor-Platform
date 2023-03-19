@@ -13,7 +13,7 @@ import Room from './models/room.js';
 //initialize server & websocket for server
 const socket = new WebSocketServer({ port : 81 });
 
-//hashmap of clients connected & rooms available
+//hashmap of clients connected (ws)
 const clients = {};
 
 //when client connect, do..
@@ -23,14 +23,7 @@ socket.on('connection', function connection(ws) {
     //TODO:roomID gaperlu disimpen terpisah lagi, bisa ambil dari si roomData
     let roomId = null;
     let roomData = null;
-
-    //send connect response back to client
-    //TODO: erase client id from payload -> change cookies
-    const payload = {
-        'method' : 'connect',
-        'clientId' : clientId
-    };
-    ws.send(JSON.stringify(payload));
+    clientConnected(ws, clientId);
 
     //when server received message from client, do..
     ws.on('message', function message(data, isBinary) {
@@ -64,80 +57,71 @@ socket.on('connection', function connection(ws) {
                     clients[clientId] = {
                         'connection' : ws
                     };
-                    joinRoom(clientId, msg.name, roomData);
 
-                    const payload = {
-                        'method' : 'join',
-                        'status' : 0,
-                        'room' : room,
-                        'newClient_Id' : clientId
-                    };
-                    ws.send(JSON.stringify(payload));
-                    
-                    //broadcast
-                    payload['status'] = 1;
-                    broadcast(payload, roomData.clients, false, clientId);
+                    joinRoom(clientId, msg.name, roomData).then(() => {
+                        const payload = {
+                            'method' : 'join',
+                            'status' : 0,
+                            'room' : roomData,
+                            'newClient_Id' : clientId
+                        };
+                        ws.send(JSON.stringify(payload));
+                        
+                        //broadcast
+                        payload['status'] = 1;
+                        broadcast(payload, roomData.clients, false, clientId);
+                    });
                 }
             });
         
         //disconnect/move from room without quitting request    
         //cuma kepake kalau di tampilan editor teksnya ada form join room & create room (skrg sih tdk digunakan)
         } else if (msg.method === 'move') {
-            const room = rooms[roomId];
-            delete room.clients[clientId];
-            const payload = {
-                'method' : 'disconnect',
-                'room' : room 
-            };
-            //broadcast 
-            broadcast(payload, roomData.clients, true, clientId);
+            console.log('MOVE TRIGGERED');
+            removeClient(clientId, roomData).then(() => {
+                const payload = {
+                    'method' : 'disconnect',
+                    'room' : roomData
+                };
+                broadcast(payload, roomData.clients, true, clientId);
+            });
 
         //notify other clients over a changed text  
         } else if (msg.method === 'updateText') {
-            
-            //TODO:save content to database
-            //notify other clients on the same room about the changes 
-            const room = rooms[roomId];
-            if (msg.lastLine !== msg.curLine) {
-                room.maxLine = msg.curLine;
-            }
-            const payload = {
-                'method' : 'updateText',
-                'text' : msg.text,
-                'curLine' : msg.curLine,
-                'lastLine' : msg.lastLine,
-                'caret' : msg.caret,
-                'editorId' : clientId, 
-                'maxLine' : room.maxLine
-            };
-            //send room state through all clients
-
-            for (const [key, value] of Object.entries(room.clients)) {
-                clients[key].connection.send(JSON.stringify(payload));
-            }
+            //TODO: roomData.clients isinya gaada si orang" yg udah join
+            // console.log('test lagi', roomData);
+            updateText(msg.lastLine, msg.curLine, msg.maxLine, msg.caret, msg.text, msg.line_order, roomData).then(() => {
+                const payload = {
+                    'method' : 'updateText',
+                    'text' : msg.text,
+                    'curLine' : msg.curLine,
+                    'lastLine' : msg.lastLine,
+                    'caret' : msg.caret,
+                    'editorId' : clientId, 
+                    'maxLine' : roomData.maxLine
+                };
+                broadcast(payload, roomData.clients, true, clientId);
+            });
 
         //notify other clients over a changed cursor position
         } else if (msg.method === 'updateCursor') {
             console.log('Cursor position updated by clientId:', msg.cursorId);
+            updateCursor(msg.line, msg.caret, msg.status, msg.cursorId, roomData);
             
-            const room = rooms[roomId];
-            const update = room.clients[msg.cursorId].clientCursor;
-            update['line'] = msg.line;
-            update['caret'] = msg.caret;
-            update['status'] = msg.status;
             const payload = {
                 'method' : 'updateCursor',
                 'cursorId' : msg.cursorId,
-                'clientCursor' : update
+                'clientCursor' : roomData.clients.get(msg.cursorId).cursor
             };
 
             //send room state through all clients
-            for (const [key, value] of Object.entries(room.clients)) {
+            for (const [key, value] of roomData.clients) {
                 clients[key].connection.send(JSON.stringify(payload));
 
                 //check & move editable affected cursors (from update text)
-                if (msg.code === 1 && key !== msg.cursorId && value.clientCursor['line'] === update['line'] && value.clientCursor['status'] === 1
-                && value.clientCursor['caret'] >= (update['caret'] - 1)) {
+                const c = roomData.clients.get(key).cursor;
+                if (msg.code === 1 && key !== msg.cursorId && value.cursor['line'] === c['line'] && value.cursor['status'] === 1
+                && value.cursor['caret'] >= (c['caret'] - 1)) {
                     // //same line, a letter typed
                     // if () {
 
@@ -148,19 +132,14 @@ socket.on('connection', function connection(ws) {
                     // } else if () {
 
                     // }
-                    console.log('affected in server', 'lineEditor:', msg.line, 'lineOtherClient:', value.clientCursor['line']);
-                    console.log('affected in server', 'affected client id:', key, 'caretEditor:', msg.caret, 'caretOtherClient:', value.clientCursor['caret']);
-                    let up = room.clients[key].clientCursor;
-                    up['caret'] += 1;
+                    
+                    updateCursor(c['line'], c['caret']+1, c['status'], key, roomData);
                     let payload2 = {
                         'method' : 'updateCursor',
                         'cursorId' : key,
-                        'clientCursor' : up
+                        'clientCursor' : c
                     };
-
-                    for (const [key, value] of Object.entries(room.clients)) {
-                        clients[key].connection.send(JSON.stringify(payload2));
-                    }     
+                    broadcast(payload2, roomData.clients, true, key);
                 } 
             }
         }
@@ -168,28 +147,34 @@ socket.on('connection', function connection(ws) {
 
     //when client disconnected, do..
     ws.on('close', function connection(ws) {
-        //delete innactive client
-        delete clients[clientId];
-        
         if (roomId !== null) {
             console.log('client ' + clientId + ' disconnected from room ' + roomId);
-            const room = rooms[roomId];
-            delete room.clients[clientId];
-
-            const payload = {
-                'method' : 'disconnect',
-                'clientId' : clientId,
-                'room' : room
-            };
-            //send room state through all clients
-            for (const [key, value] of Object.entries(room.clients)) {
-                clients[key].connection.send(JSON.stringify(payload));
-            }
+            removeClient(clientId, roomData).then(() => {
+                const payload = {
+                    'method' : 'disconnect',
+                    'clientId' : clientId,
+                    'room' : roomData
+                };
+                broadcast(payload, roomData.clients, true, clientId);   
+                
+                //delete innactive client
+                delete clients[clientId];
+            });
         }
     });
 });
 //export websocker server
 export default socket;
+
+
+//connect response 
+function clientConnected (ws, clientId) {
+    const payload = {
+        'method' : 'connect',
+        'clientId' : clientId
+    };
+    ws.send(JSON.stringify(payload));
+}
 
 
 //create new room
@@ -221,7 +206,6 @@ async function getRoom (roomId) {
     } else {
         return null;
     }
-    
 }
 
 
@@ -231,13 +215,47 @@ async function joinRoom (clientId, name, roomData) {
     roomData.clients.set(clientId, {
         name : name,
         cursor : {
-            'line' : 1,
-            'caret' : 0,
-            'color' : "0",
-            'status' : 0
+            line : 1,
+            caret : 0,
+            color : "0",
+            status : 0
         }
     });
-    roomData.save();
+    await roomData.save();
+}
+
+
+//updateText TODO:ganti jadi redis
+async function updateText (lastLine, line, maxLine, caret, text, line_order, roomData) {
+    roomData.maxLine = maxLine;
+    if (roomData.lines_order[line_order] !== line) {
+        roomData.lines_order.splice(line_order, 0, line);
+    }
+    roomData.lines.set(line.toString(), {
+        text : text
+    });
+
+    await roomData.save();
+}
+
+
+//updateCursor TODO:ganti jadi redis
+async function updateCursor (line, caret, status, clientId, roomData) {
+    console.log(roomData);
+    roomData.clients.get(clientId).cursor = {
+        line : line,
+        caret : caret,
+        color : 'asdf',
+        status : status
+    }
+    await roomData.save();
+}
+
+
+//remove client
+async function removeClient (clientId, roomData) {
+    roomData.clients.delete(clientId);
+    await roomData.save();
 }
 
 
@@ -246,7 +264,7 @@ function broadcast (payload, target, self, editorId) {
     for (const [key, value] of target) {
         if (!self && key == editorId) {
             continue;
-        } else {
+        } else if (clients[key] !== undefined) {
             clients[key].connection.send(JSON.stringify(payload));
         }
     }

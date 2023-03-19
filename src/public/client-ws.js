@@ -9,6 +9,7 @@ let curRoom = {
     'room' : null
 };
 let letterWidth = 0.0;
+let parent = null;
 
 //client ws message listener
 ws.addEventListener('message', function message(data) {
@@ -53,6 +54,7 @@ ws.addEventListener('message', function message(data) {
     
     // receive text update 
     } else if (resp.method === 'updateText') {
+        console.log('receive update text',resp.text);
         const lineDiv = document.getElementById(resp.curLine);
         curRoom.room.maxLine = resp.maxLine;
 
@@ -72,7 +74,7 @@ ws.addEventListener('message', function message(data) {
             }
             //move ONLY client-editor's cursor position
             if (resp.editorId === JSON.parse(document.cookie)['clientId']) {
-                const cCursor = curRoom.room.clients[resp.editorId].clientCursor;
+                const cCursor = curRoom.room.clients[resp.editorId].cursor;
                 cCursor['caret'] += 1;
                 cCursor['line'] = resp.curLine;
                 notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1, 1);
@@ -81,7 +83,7 @@ ws.addEventListener('message', function message(data) {
     
     // receive cursor position update
     } else if (resp.method === 'updateCursor') {
-        curRoom.room.clients[resp.cursorId].clientCursor = resp.clientCursor;
+        curRoom.room.clients[resp.cursorId].cursor = resp.clientCursor;
         updateCursor(resp.cursorId);
         if (JSON.parse(document.cookie)['clientId'] === resp.cursorId) {
             updateTextareaCaret(document.getElementById(resp.clientCursor['line']).children[0].textContent, resp.clientCursor['caret']);
@@ -89,7 +91,7 @@ ws.addEventListener('message', function message(data) {
         
     // someone disconnected
     } else if (resp.method === 'disconnect') {
-        clientCounter.textContent = 'clients connected : ' + resp.room.clients.length + '';
+        clientCounter.textContent = 'clients connected : ' + Object.keys(resp.room.clients).length + '';
         console.log('client id ' + JSON.parse(document.cookie)['clientId'] + ' has disconnected.');
     }
 });
@@ -164,8 +166,11 @@ function moveToTextEditor () {
         document.getElementById('mainContainer').innerHTML = xhttp.responseText;
         document.getElementById('roomCode').textContent = 'Room id : ' + curRoom.id;;
         document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(curRoom.room.clients).length + '';
-
-        //create new cursor for this new client
+        
+        //generate existing room's text
+        loadAllText();
+        
+        // create new cursor for this new client
         createNewCursor(JSON.parse(document.cookie)['clientId']);
 
         //generate existing client's cursor 
@@ -173,12 +178,23 @@ function moveToTextEditor () {
             if (key !== JSON.parse(document.cookie)['clientId']) {
                 createNewCursor(key);
                 updateCursor(key);
-                const text = document.getElementById(value.clientCursor['line']).children[0].textContent;
-                updateTextareaCaret(text, value.clientCursor['caret']);
+                const text = document.getElementById(value.cursor['line']).children[0].textContent;
+                updateTextareaCaret(text, value.cursor['caret']);
             }
         }    
+
+        parent = document.getElementById('text-presentation');
     };
     xhttp.send();
+}
+
+
+//load existing text
+function loadAllText () {
+    for (let [index, value] of curRoom.room.lines_order.entries()) {
+        const text = curRoom.room.lines[value].text;
+        createNewLine(curRoom.room.lines_order[index-1], value, text);
+    }
 }
 
 
@@ -241,13 +257,14 @@ function updateTextareaCaret (text, caret) {
 
 //update cursor's x and y
 function updateCursor (cursorId) {
-    if (curRoom.room.clients[cursorId].clientCursor['status'] === 1) {
+    if (curRoom.room.clients[cursorId].cursor['status'] === 1) {
         const cursorWrapper = document.getElementById(cursorId);
         const cursor = cursorWrapper.children[0];
         const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
     
         //update cursor position
-        const cursorPosition = curRoom.room.clients[cursorId].clientCursor;
+        const cursorPosition = curRoom.room.clients[cursorId].cursor;
+        console.log('tester cursor', cursorPosition);
         const elementBounding = document.getElementById(cursorPosition['line']).children[0].getBoundingClientRect();
         cursor.style.left = (elementBounding.left + (letterWidth * cursorPosition['caret'])) + "px";
         cursor.style.top = (elementBounding.y - wrapperBounding.y) + "px";
@@ -262,14 +279,14 @@ function updateCursor (cursorId) {
 //accept input from clients
 function receiveInput (event) {
     const textarea = document.getElementById('textarea');
-    const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].clientCursor;
+    const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
     const editedLine = cCursor['line'];
 
     //adding new line div
     if (event.key === 'Enter') {
         //bukan di akhir line
         if ((textarea.value.length - 1) !== cCursor['caret']) {
-            notifyTextUpdate(textarea.value.substring(0, cCursor['caret']), editedLine, editedLine, cCursor['caret']);
+            notifyTextUpdate(textarea.value.substring(0, cCursor['caret']), editedLine, editedLine, curRoom.room.maxLine, cCursor['caret']);
             textarea.value = textarea.value.substring(cCursor['caret'] + 1);
             cCursor['caret'] = -2;
         //akhir line
@@ -279,7 +296,7 @@ function receiveInput (event) {
         }
         cCursor['line'] = curRoom.room.maxLine + 1;
         createNewLine(editedLine, cCursor['line'], textarea.value);
-        notifyTextUpdate(textarea.value, editedLine, cCursor['line'], cCursor['caret']);
+        notifyTextUpdate(textarea.value, editedLine, cCursor['line'], curRoom.room.maxLine + 1, cCursor['caret']);
     
     //delete character
     //TODO:IMPLEMENT
@@ -304,32 +321,41 @@ function receiveInput (event) {
     
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
-        notifyTextUpdate(textarea.value, editedLine, editedLine, cCursor['caret']);
+        notifyTextUpdate(textarea.value, editedLine, editedLine, curRoom.room.maxLine, cCursor['caret']);
     }
 };
 
 
 //create new line div
 function createNewLine (lastLineId, curLineId, textValue) {
-    const lastLineDiv = document.getElementById(lastLineId);
-    const lineDiv = document.createElement('div');
-    const linePre = document.createElement('pre');
-    linePre.textContent = textValue;
-    lineDiv.id = curLineId;
-    lineDiv.classList.add('line');
-    lineDiv.appendChild(linePre);
-    lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
+    if (lastLineId === undefined) {
+        document.getElementById(curLineId).textContent = textValue;
+    } else {
+        const lastLineDiv = document.getElementById(lastLineId);
+        const lineDiv = document.createElement('div');
+        const linePre = document.createElement('pre');
+        linePre.textContent = textValue;
+        lineDiv.id = curLineId;
+        lineDiv.classList.add('line');
+        lineDiv.appendChild(linePre);
+        lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
+    }
+    
 }
 
 
 //notify server over a changed text
-function notifyTextUpdate (text, lastLine, curLine, caret) {
+function notifyTextUpdate (text, lastLine, curLine, maxLine, caret) {
+    console.log('edited Line:', curLine, text);
+    const child = document.getElementById(curLine);
     const payload = {
         'method' : 'updateText',
         'text' : text,
         'curLine' : curLine,
         'lastLine' : lastLine,
-        'caret' : caret
+        'maxLine' : maxLine,
+        'caret' : caret,
+        'line_order' : Array.prototype.indexOf.call(parent.children, child)
     };
     ws.send(JSON.stringify(payload));
 }

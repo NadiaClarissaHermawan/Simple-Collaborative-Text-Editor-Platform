@@ -14,7 +14,8 @@ const Room = mongoose.model('Room', {
     lines : {
         type: Map,
         of : Line
-    }
+    },
+    lines_order : []
 });
 export default Room;
 
