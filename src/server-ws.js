@@ -69,33 +69,18 @@ socket.on('connection', function connection(ws) {
 
         //notify other clients over a changed text  
         } else if (msg.method === 'updateText') {
-            //TODO: roomData.clients isinya gaada si orang" yg udah join
-            // console.log('test lagi', roomData);
-            // updateText(msg.lastLine, msg.curLine, msg.maxLine, msg.caret, msg.text, msg.line_order, roomData).then(() => {
-            //     const payload = {
-            //         'method' : 'updateText',
-            //         'text' : msg.text,
-            //         'curLine' : msg.curLine,
-            //         'lastLine' : msg.lastLine,
-            //         'caret' : msg.caret,
-            //         'editorId' : clientId, 
-            //         'maxLine' : roomData.maxLine
-            //     };
-            //     broadcast(payload, roomData.clients, true, clientId);
-            // });
-            if (msg.lastLine !== msg.curLine) {
-                roomData.maxLine = msg.curLine;
-            }
-            const payload = {
-                'method' : 'updateText',
-                'text' : msg.text,
-                'curLine' : msg.curLine,
-                'lastLine' : msg.lastLine,
-                'caret' : msg.caret,
-                'editorId' : clientId, 
-                'maxLine' : roomData.maxLine
-            };
-            broadcast(payload, roomData.clients, true, clientId);
+            updateText(msg, roomId).then((roomData) => {
+                const payload = {
+                    'method' : 'updateText',
+                    'text' : msg.text,
+                    'curLine' : msg.curLine,
+                    'lastLine' : msg.lastLine,
+                    'caret' : msg.caret,
+                    'editorId' : clientId, 
+                    'maxLine' : roomData.maxLine
+                };
+                broadcast(payload, roomData.clients, true, clientId);
+            });
 
         //notify other clients over a changed cursor position
         } else if (msg.method === 'updateCursor') {
@@ -122,13 +107,12 @@ socket.on('connection', function connection(ws) {
                     'room' : roomData
                 };
                 broadcast(payload, roomData.clients, true, clientId);   
-                //delete innactive client
+                //delete innactive client's connection
                 delete clients[clientId];
             });
         }
     });
 });
-//export websocker server
 export default socket;
 
 
@@ -199,16 +183,24 @@ async function joinRoom (clientId, name, roomId) {
 
 
 //updateText TODO:ganti jadi redis/smth non-persistent
-async function updateText (lastLine, line, maxLine, caret, text, line_order, roomData) {
-    roomData.maxLine = maxLine;
-    if (roomData.lines_order[line_order] !== line) {
-        roomData.lines_order.splice(line_order, 0, line);
+async function updateText (update, roomId) {
+    const roomData = rooms[roomId];
+    roomData.maxLine = update.maxLine;
+
+    //kalau line id blm ada di urutan kemunculan baris
+    if (roomData.lines_order[update.line_order] !== update.curLine) {
+        roomData.lines_order.splice(update.line_order, 0, update.curLine);
     }
-    roomData.lines.set(line.toString(), {
-        text : text
+
+    roomData.lines.set((update.curLine).toString(), {
+        text : update.text
     });
 
-    await roomData.save();
+    try {
+        return await roomData.save();
+    } catch (err) {
+        console.log('Error', err);
+    }
 }
 
 

@@ -79,7 +79,8 @@ ws.addEventListener('message', function message(data) {
                 notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1);
 
                 //check & move affected cursors
-                (roomData.clients).forEach(function(value, key) {
+                //TODO: fix this, cari cara ngeloop map of clientsnya
+                (roomData.clients).forEach((value, key) => {
                     if (key !== resp.editorId && value.cursor['line'] === cCursor['line'] 
                     && value.cursor['status'] === 1
                     && value.cursor['caret'] >= (cCursor['caret'] - 1)) {
@@ -261,7 +262,6 @@ function updateCursor (cursorId) {
     
         //update cursor position
         const cursorPosition = curRoom.room.clients[cursorId].cursor;
-        console.log('tester cursor', cursorPosition);
         const elementBounding = document.getElementById(cursorPosition['line']).children[0].getBoundingClientRect();
         cursor.style.left = (elementBounding.left + (letterWidth * cursorPosition['caret'])) + "px";
         cursor.style.top = (elementBounding.y - wrapperBounding.y) + "px";
