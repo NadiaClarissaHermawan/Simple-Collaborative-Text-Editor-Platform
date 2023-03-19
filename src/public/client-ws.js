@@ -5,7 +5,6 @@ let ws = new WebSocket('ws://localhost:81');
 //global attributes
 let curRoom = {
     'id' : null,
-    'creator' : -1, //-1 blm join & bukan creator, 0 join tp bukan creator, 1 creator room
     'room' : null
 };
 let letterWidth = 0.0;
@@ -30,7 +29,6 @@ ws.addEventListener('message', function message(data) {
     } else if (resp.method === 'create') {
         curRoom = {
             'id' : resp.roomId,
-            'creator' : 1,
             'room': null
         };
         console.log('room successfully created with id ' + resp.roomId);
@@ -38,12 +36,12 @@ ws.addEventListener('message', function message(data) {
 
     //join
     } else if (resp.method === 'join') {
-        if (resp.status === -1) {
+        if (resp.client_status === -1) {
             alert('Wrong room code!');
         } else {
             curRoom.room = resp.room;
             //new client joins room
-            if (resp.status === 0) {
+            if (resp.client_status === 0) {
                 moveToTextEditor();
             //existing client inside the room gets informational update
             } else {
@@ -56,7 +54,8 @@ ws.addEventListener('message', function message(data) {
     } else if (resp.method === 'updateText') {
         console.log('receive update text',resp.text);
         const lineDiv = document.getElementById(resp.curLine);
-        curRoom.room.maxLine = resp.maxLine;
+        const roomData = curRoom.room;
+        roomData.maxLine = resp.maxLine;
 
         //new line
         if (lineDiv === null) {
@@ -74,10 +73,19 @@ ws.addEventListener('message', function message(data) {
             }
             //move ONLY client-editor's cursor position
             if (resp.editorId === JSON.parse(document.cookie)['clientId']) {
-                const cCursor = curRoom.room.clients[resp.editorId].cursor;
+                const cCursor = roomData.clients[resp.editorId].cursor;
                 cCursor['caret'] += 1;
                 cCursor['line'] = resp.curLine;
-                notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1, 1);
+                notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1);
+
+                //check & move affected cursors
+                (roomData.clients).forEach(function(value, key) {
+                    if (key !== resp.editorId && value.cursor['line'] === cCursor['line'] 
+                    && value.cursor['status'] === 1
+                    && value.cursor['caret'] >= (cCursor['caret'] - 1)) {
+                        notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
+                    }
+                });
             }
         }
     
@@ -99,17 +107,13 @@ ws.addEventListener('message', function message(data) {
 
 //create room button
 function createRoom (e) {
-    if (curRoom.creator !== -1) {
+    const name = document.getElementById('name').value;
+    if (nameCheck(name)) {
         const payLoad = {
-            'method' : 'move'
+            'method' : 'create'
         };
         ws.send(JSON.stringify(payLoad));
     }
-
-    const payLoad = {
-        'method' : 'create'
-    };
-    ws.send(JSON.stringify(payLoad));
 }
 
 
@@ -118,16 +122,9 @@ function joinRoom (e) {
     const name = document.getElementById('name').value;
     const inputRoomId = document.getElementById('roomId');
     if (nameCheck(name)) {
-        if (inputRoomId.value !== '' && curRoom.creator !== 1) {
-            if (curRoom.creator !== -1) {
-                const payLoad = {
-                    'method' : 'move'
-                };
-                ws.send(JSON.stringify(payLoad));
-            }
+        if (inputRoomId.value !== '') {
             curRoom = {
                 'id' : inputRoomId.value.trim(),
-                'creator' : 0,
                 'room' : null
             };
         } 
@@ -241,7 +238,7 @@ function getClickPosition (event) {
             caret = clickedElement.textContent.length;
         }
     } 
-    notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1, 0);
+    notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1);
 }
 
 
@@ -362,14 +359,13 @@ function notifyTextUpdate (text, lastLine, curLine, maxLine, caret) {
 
 
 //notify server over a changed cursor position
-function notifyCursorUpdate (cursorId, line, caret, status, code) {
+function notifyCursorUpdate (cursorId, line, caret, status) {
     const payload = {
         'method' : 'updateCursor',
         'cursorId' : cursorId,
         'line' : line,
         'caret' : caret,
-        'status' : status,
-        'code' : code //nunjukin cursor diupdate karena apa, 0 = klik event, 1 = pergeseran krn ada yg ngetik
+        'status' : status
     };
     ws.send(JSON.stringify(payload));
 }
