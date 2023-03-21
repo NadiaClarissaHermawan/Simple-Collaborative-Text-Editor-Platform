@@ -68,6 +68,7 @@ socket.on('connection', function connection(ws) {
             });
 
         //notify other clients over a changed text  
+        //TODO: update text urutannya ngaco (line hasil enter baru line sblmnya)
         } else if (msg.method === 'updateText') {
             updateText(msg, roomId).then((roomData) => {
                 const payload = {
@@ -77,9 +78,9 @@ socket.on('connection', function connection(ws) {
                     'lastLine' : msg.lastLine,
                     'caret' : msg.caret,
                     'editorId' : clientId, 
-                    'maxLine' : roomData.maxLine
+                    'maxLine' : rooms[roomId].maxLine
                 };
-                broadcast(payload, roomData.clients, true, clientId);
+                broadcast(payload, rooms[roomId].clients, true, clientId);
             });
 
         //notify other clients over a changed cursor position
@@ -89,9 +90,9 @@ socket.on('connection', function connection(ws) {
                 const payload = {
                     'method' : 'updateCursor',
                     'cursorId' : msg.cursorId,
-                    'clientCursor' : roomData.clients.get(msg.cursorId).cursor
+                    'clientCursor' : rooms[roomId].clients.get(msg.cursorId).cursor
                 };
-                broadcast(payload, roomData.clients, true, msg.cursorId);
+                broadcast(payload, rooms[roomId].clients, true, msg.cursorId);
             });
         }
     });
@@ -104,9 +105,9 @@ socket.on('connection', function connection(ws) {
                 const payload = {
                     'method' : 'disconnect',
                     'clientId' : clientId,
-                    'room' : roomData
+                    'room' : rooms[roomId]
                 };
-                broadcast(payload, roomData.clients, true, clientId);   
+                broadcast(payload, rooms[roomId].clients, true, clientId);   
                 //delete innactive client's connection
                 delete clients[clientId];
             });
@@ -158,7 +159,7 @@ async function getRoom (roomId) {
 }
 
 
-//join room
+//join room TODO:ganti jadi redis/smth non-persistent
 async function joinRoom (clientId, name, roomId) {
     const roomData = await getRoom(roomId);
     if (roomData === null) {

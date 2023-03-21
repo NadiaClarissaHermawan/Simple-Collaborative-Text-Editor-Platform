@@ -52,7 +52,6 @@ ws.addEventListener('message', function message(data) {
     
     // receive text update 
     } else if (resp.method === 'updateText') {
-        console.log('receive update text',resp.text);
         const lineDiv = document.getElementById(resp.curLine);
         const roomData = curRoom.room;
         roomData.maxLine = resp.maxLine;
@@ -74,19 +73,19 @@ ws.addEventListener('message', function message(data) {
             //move ONLY client-editor's cursor position
             if (resp.editorId === JSON.parse(document.cookie)['clientId']) {
                 const cCursor = roomData.clients[resp.editorId].cursor;
-                cCursor['caret'] += 1;
+                console.log('editors cursor updated !, line : ', resp.curLine, ' text: ',resp.text);
                 cCursor['line'] = resp.curLine;
                 notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1);
 
                 //check & move affected cursors
-                //TODO: fix this, cari cara ngeloop map of clientsnya
-                (roomData.clients).forEach((value, key) => {
+                console.log('test room clients', roomData.clients);
+                for (const [key, value] of Object.entries(roomData.clients)) {
                     if (key !== resp.editorId && value.cursor['line'] === cCursor['line'] 
                     && value.cursor['status'] === 1
                     && value.cursor['caret'] >= (cCursor['caret'] - 1)) {
                         notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
                     }
-                });
+                }
             }
         }
     
@@ -281,25 +280,16 @@ function receiveInput (event) {
 
     //adding new line div
     if (event.key === 'Enter') {
-        //bukan di akhir line
-        if ((textarea.value.length - 1) !== cCursor['caret']) {
-            notifyTextUpdate(textarea.value.substring(0, cCursor['caret']), editedLine, editedLine, curRoom.room.maxLine, cCursor['caret']);
-            textarea.value = textarea.value.substring(cCursor['caret'] + 1);
-            cCursor['caret'] = -2;
-        //akhir line
-        } else {
-            textarea.value = "";
-            cCursor['caret'] = -1;
-        }
-        cCursor['line'] = curRoom.room.maxLine + 1;
-        createNewLine(editedLine, cCursor['line'], textarea.value);
-        notifyTextUpdate(textarea.value, editedLine, cCursor['line'], curRoom.room.maxLine + 1, cCursor['caret']);
-    
-    //delete character
-    //TODO:IMPLEMENT
-    } else if (event.key === 'Backspace') {
-        console.log('back');
-    
+        //TODO: aneh ini ntah kenapa si text yg keupdate itu yg ada di thennya duluan, baru yg di enterKeyHanlder
+        enterKeyHandler(textarea.value, cCursor, editedLine, curRoom.room.maxLine).then((text) => {
+            console.log('kedua');
+            cCursor['caret'] = 0;
+            curRoom.room.maxLine +=1;
+            cCursor['line'] = curRoom.room.maxLine;
+            createNewLine(editedLine, cCursor['line'], text);
+            notifyTextUpdate(text, editedLine, cCursor['line'], curRoom.room.maxLine, cCursor['caret']);
+        })
+        
     //uppercase 
     } else if (event.key === 'CapsLock' || event.key === 'Shift'){
         event.preventDefault();
@@ -318,9 +308,31 @@ function receiveInput (event) {
     
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
+        if (event.key === 'Backspace') { 
+            if (textarea.value.length >= 0 && cCursor['caret'] > 0) { 
+                cCursor['caret'] -= 1; 
+            }
+        } else { 
+            cCursor['caret'] += 1; 
+        }
         notifyTextUpdate(textarea.value, editedLine, editedLine, curRoom.room.maxLine, cCursor['caret']);
     }
 };
+
+
+// Enter key handler
+async function enterKeyHandler (text, cCursor, line, maxLine) {
+    console.log('pertama');
+    //bukan di akhir line
+    if ((text.length - 1) !== cCursor['caret']) {
+        notifyTextUpdate(text.substring(0, cCursor['caret']), line, line, maxLine, cCursor['caret']);
+        text = text.substring(cCursor['caret'] + 1);
+    //akhir line
+    } else {
+        text = "";
+    }
+    return text;
+}
 
 
 //create new line div
@@ -343,7 +355,6 @@ function createNewLine (lastLineId, curLineId, textValue) {
 
 //notify server over a changed text
 function notifyTextUpdate (text, lastLine, curLine, maxLine, caret) {
-    console.log('edited Line:', curLine, text);
     const child = document.getElementById(curLine);
     const payload = {
         'method' : 'updateText',
