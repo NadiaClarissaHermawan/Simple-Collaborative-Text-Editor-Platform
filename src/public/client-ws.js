@@ -66,10 +66,8 @@ ws.addEventListener('message', function message(data) {
             document.getElementById('textarea').value = resp.text;
 
             //first character typed, measure letter width
-            if (letterWidth === 0.0) {
-                const textBounding = textElement.getBoundingClientRect();
-                letterWidth = (textBounding.right - textBounding.left) / textElement.textContent.length;
-            }
+            if (letterWidth === 0.0) { countLetterWidth(textElement); }
+
             //move ONLY client-editor's cursor position
             if (resp.editorId === JSON.parse(document.cookie)['clientId']) {
                 const cCursor = roomData.clients[resp.editorId].cursor;
@@ -78,7 +76,6 @@ ws.addEventListener('message', function message(data) {
                 notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1);
 
                 //check & move affected cursors
-                console.log('test room clients', roomData.clients);
                 for (const [key, value] of Object.entries(roomData.clients)) {
                     if (key !== resp.editorId && value.cursor['line'] === cCursor['line'] 
                     && value.cursor['status'] === 1
@@ -165,20 +162,10 @@ function moveToTextEditor () {
         document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(curRoom.room.clients).length + '';
         
         //generate existing room's text
-        loadAllText();
-        
+        loadAllContent();
+
         // create new cursor for this new client
         createNewCursor(JSON.parse(document.cookie)['clientId']);
-
-        //generate existing client's cursor 
-        for (const [key, value] of Object.entries(curRoom.room.clients)) {
-            if (key !== JSON.parse(document.cookie)['clientId']) {
-                createNewCursor(key);
-                updateCursor(key);
-                const text = document.getElementById(value.cursor['line']).children[0].textContent;
-                updateTextareaCaret(text, value.cursor['caret']);
-            }
-        }    
 
         parent = document.getElementById('text-presentation');
     };
@@ -187,11 +174,35 @@ function moveToTextEditor () {
 
 
 //load existing text
-function loadAllText () {
+function loadAllContent () {
+    //generate existing texts
+    let text = "";
     for (let [index, value] of curRoom.room.lines_order.entries()) {
-        const text = curRoom.room.lines[value].text;
+        text = curRoom.room.lines[value].text;
         createNewLine(curRoom.room.lines_order[index-1], value, text);
+
+        //textwidth 
+        if (letterWidth === 0.0 && text.length > 0) { 
+            countLetterWidth(document.getElementById(value).children[0]); 
+        }
     }
+
+    //generate existing client cursors 
+    for (const [key, value] of Object.entries(curRoom.room.clients)) {
+        if (key !== JSON.parse(document.cookie)['clientId']) {
+            createNewCursor(key);
+            updateCursor(key);
+            const text = document.getElementById(value.cursor['line']).children[0].textContent;
+            updateTextareaCaret(text, value.cursor['caret']);
+        }
+    }    
+}
+
+
+//letter width counter
+function countLetterWidth (textElement) {
+    const textBounding = textElement.getBoundingClientRect();
+    letterWidth = (textBounding.right - textBounding.left) / textElement.textContent.length;
 }
 
 
@@ -282,7 +293,6 @@ function receiveInput (event) {
     if (event.key === 'Enter') {
         //TODO: aneh ini ntah kenapa si text yg keupdate itu yg ada di thennya duluan, baru yg di enterKeyHanlder
         enterKeyHandler(textarea.value, cCursor, editedLine, curRoom.room.maxLine).then((text) => {
-            console.log('kedua');
             cCursor['caret'] = 0;
             curRoom.room.maxLine +=1;
             cCursor['line'] = curRoom.room.maxLine;
@@ -296,16 +306,33 @@ function receiveInput (event) {
 
     //left
     } else if (event.key === 'ArrowLeft') {
-
+        if (cCursor['caret'] > 0) {
+            notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']-1, 1);
+        }
+    
     //right
     } else if (event.key === 'ArrowRight') {
+        const len = document.getElementById(cCursor['line']).children[0].textContent.length;
+        if (cCursor['caret'] < len) {
+            notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']+1, 1);
+        }
 
     //up
     } else if (event.key === 'ArrowUp') {
-
+        const topDivId = document.getElementById('text-presentation').children[0].id;
+        if (cCursor['line'] !== topDivId) {
+            const prevDivId = document.getElementById(cCursor['line']).previousSibling.id;
+            notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDivId, cCursor['caret'], 1);
+        }
+        
     //down
     } else if (event.key === 'ArrowDown') {
-    
+        const bottomDivElement = document.getElementById('text-presentation').lastElementChild;
+        if (cCursor['line'] !== bottomDivElement.id) {
+            const nextDivId = document.getElementById(cCursor['line']).nextSibling.id;
+            notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDivId, cCursor['caret'], 1)
+        }
+
     //alphanumeric & symbol (a-z, A-Z, 0-9)
     } else {
         if (event.key === 'Backspace') { 
@@ -338,7 +365,7 @@ async function enterKeyHandler (text, cCursor, line, maxLine) {
 //create new line div
 function createNewLine (lastLineId, curLineId, textValue) {
     if (lastLineId === undefined) {
-        document.getElementById(curLineId).textContent = textValue;
+        document.getElementById(curLineId).children[0].textContent = textValue;
     } else {
         const lastLineDiv = document.getElementById(lastLineId);
         const lineDiv = document.createElement('div');
@@ -349,7 +376,6 @@ function createNewLine (lastLineId, curLineId, textValue) {
         lineDiv.appendChild(linePre);
         lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
     }
-    
 }
 
 
