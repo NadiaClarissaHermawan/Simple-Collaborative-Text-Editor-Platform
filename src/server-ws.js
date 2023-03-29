@@ -6,11 +6,13 @@ import { WebSocketServer } from 'ws';
 import mongoose from 'mongoose';
 //import Room.js (Mongoose Schema Model)
 import Room from './models/room.js';
+//import Redis 
+import Redis from './utils/db.js';
 
 //initialize server & websocket for server
 const socket = new WebSocketServer({ port : 81 });
 
-//hashmap of client's connection (ws)
+//hashmap of online client's connection (ws)
 const clients = {};
 //hashmap of loaded rooms (non-persistent)
 const rooms = {};
@@ -63,7 +65,12 @@ socket.on('connection', function connection(ws) {
                     ws.send(JSON.stringify(payload));
                     
                     payload['client_status'] = 1;
-                    broadcast(payload, roomData.clients, false, clientId);
+
+                    //TODO: pilih data yg mau diolah di server bentuknya pake si mongo Schema model atau pake object aja (returnan redis), ini akan pengaruh ke cara looping dll
+                    console.log('testing', roomData);
+                    console.log('testing2', Room.hydrate(roomData).clients);
+                    console.log('testing2', typeof(roomData.clients));
+                    // broadcast(payload, roomData.clients, false, clientId);
                 }
             });
 
@@ -159,26 +166,35 @@ async function getRoom (roomId) {
 }
 
 
-//join room TODO:ganti jadi redis/smth non-persistent
+//join room 
 async function joinRoom (clientId, name, roomId) {
-    const roomData = await getRoom(roomId);
+    let roomData = await Redis.get(roomId);
+    //blm ada di Redis --> ambil ke Mongo
     if (roomData === null) {
-        return null;
-    } else {
-        roomData.clients.set(clientId, {
-            name : name,
-            cursor : {
-                line : 1,
-                caret : 0,
-                color : "0",
-                status : 0
+        roomData = await getRoom(roomId);
+        if (roomData === null) {
+            return null;
+        } else {
+            //update daftar client di MongoDB
+            roomData.clients.set(clientId, {
+                name : name,
+                cursor : {
+                    line : 1,
+                    caret : 0,
+                    color : "0",
+                    status : 0
+                }
+            });
+            try {
+                await Redis.set(roomId, JSON.stringify(roomData));
+                return await roomData.save();
+            } catch (err) {
+                console.log('Error', err);
             }
-        });
-        try {
-            return await roomData.save();
-        } catch (err) {
-            console.log('Error', err);
         }
+    //sdh ada di Redis
+    } else {
+        return JSON.parse(await Redis.get(roomId));
     }
 }
 
@@ -205,7 +221,7 @@ async function updateText (update, roomId) {
 }
 
 
-//updateCursor
+//updateCursor TODO:ganti jadi redis/smth non-persistent
 async function updateCursor (line, caret, status, clientId, roomId) {
     const roomData = rooms[roomId];
     roomData.clients.get(clientId).cursor = {
@@ -218,8 +234,7 @@ async function updateCursor (line, caret, status, clientId, roomId) {
         return await roomData.save();
     } catch (err) {
         console.log('Error', err);
-    }
-    
+    }    
 }
 
 
@@ -227,6 +242,7 @@ async function updateCursor (line, caret, status, clientId, roomId) {
 async function removeClient (clientId, roomId) {
     const roomData = rooms[roomId];
     roomData.clients.delete(clientId);
+
     try {
         return await roomData.save();
     } catch (err) {
