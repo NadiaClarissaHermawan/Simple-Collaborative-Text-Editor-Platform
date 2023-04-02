@@ -45,34 +45,28 @@ socket.on('connection', function connection(ws) {
         } else if (msg.method === 'join') {
             let payload = null;
             joinRoom(clientId, msg.name, msg.roomId).then((roomData) => {
-                // if (roomData === null) {
-                //     payload = {
-                //         'method' : 'join',
-                //         'client_status' : -1
-                //     };
-                //     ws.send(JSON.stringify(payload));
+                if (roomData === null) {
+                    payload = {
+                        'method' : 'join',
+                        'client_status' : -1
+                    };
+                    ws.send(JSON.stringify(payload));
 
-                // } else {
-                //     roomId = msg.roomId;
-                //     rooms[roomId] = roomData;
-                //     clients[clientId] = {'connection' : ws};
-                //     payload = {
-                //         'method' : 'join',
-                //         'client_status' : 0,
-                //         'room' : roomData,
-                //         'newClient_Id' : clientId
-                //     };
-                //     ws.send(JSON.stringify(payload));
+                } else {
+                    roomId = msg.roomId;
+                    rooms[roomId] = roomData;
+                    clients[clientId] = {'connection' : ws};
+                    payload = {
+                        'method' : 'join',
+                        'client_status' : 0,
+                        'room' : roomData,
+                        'newClient_Id' : clientId
+                    };
+                    ws.send(JSON.stringify(payload));
                     
-                //     payload['client_status'] = 1;
-
-                //     //TODO: pilih data yg mau diolah di server bentuknya pake si mongo Schema model atau pake object aja (returnan redis), ini akan pengaruh ke cara looping dll
-                    
-                //     // console.log('type cast mongoose schema model to object', roomData);
-                //     console.log('type cast object to mongoose schema model', Room.hydrate(roomData).clients);
-                //     console.log('testing2', typeof(roomData));
-                //     // broadcast(payload, roomData.clients, false, clientId);
-                // }
+                    payload['client_status'] = 1;
+                    broadcast(payload, roomData.clients, false, clientId);
+                }
             });
 
         //notify other clients over a changed text  
@@ -152,45 +146,12 @@ async function createRoom () {
 }
 
 
-//join room  
-async function joinRoom (clientId, name, roomId) {
-    let roomData = await Redis.get(roomId);
-    //blm ada di Redis --> ambil ke Mongo
-    if (roomData === null) {
-        roomData = await getRoom(roomId);
-        if (roomData === null) {
-            return null;
-        } else {
-            //update daftar client di MongoDB
-            roomData.clients.set(clientId, {
-                name : name,
-                cursor : {
-                    line : 1,
-                    caret : 0,
-                    color : "0",
-                    status : 0
-                }
-            });
-            try {
-                await Redis.set(roomId, JSON.stringify(roomData));
-                return await roomData.save();
-            } catch (err) {
-                console.log('Error', err);
-            }
-        }
-    //sdh ada di Redis
-    } else {
-        return JSON.parse(await Redis.get(roomId));
-    }
-}
-
-
 //get existing room data from MongoDB
 function getRoomFromMongo (roomId) {
     if (mongoose.Types.ObjectId.isValid(roomId)) {
         try {
             const roomObjId = mongoose.Types.ObjectId.createFromHexString(roomId);
-            return Room.findById(roomObjId);
+            return Room.findById(roomObjId).lean();
         } catch (err) {
             console.log('Error', err);
         }
@@ -200,8 +161,26 @@ function getRoomFromMongo (roomId) {
 }
 
 
+//join room  
+async function joinRoom (clientId, name, roomId) {
+    let roomData = await Redis.get(roomId);
+    //blm ada di Redis --> ambil ke Mongo
+    if (roomData === null) {
+        roomData = await getRoomFromMongo(roomId);
+        if (roomData === null) {
+            return null;
+        } else {
+            return updateClientData(clientId, roomData, name);
+        }
+    //sdh ada di Redis
+    } else {
+        return updateClientData(clientId, JSON.parse(roomData), name);
+    }
+}
+
+
 //call updateClientMongo async & updateClientRedis sync
-function updateClientData (clientId, roomData, name) {
+async function updateClientData (clientId, roomData, name) {
     roomData.clients[clientId] = {
         name : name,
         cursor : {
@@ -214,27 +193,22 @@ function updateClientData (clientId, roomData, name) {
     //async
     updateClientMongo(roomData);
     //sync
-    updateClientRedis(roomData);
+    await updateClientRedis(roomData);
+    return roomData;
 }
 
 
-//update client list at MongoDB 
-async function updateClientMongo (roomData) {
-    try {
-        console.log('test hasil save', await Room.hydrate(roomData).save());
-    } catch (err) {
-        console.log('Error', err);
-    }
+//update client list at MongoDB (async)
+function updateClientMongo (roomData) {
+    roomData = Room.hydrate(roomData);
+    roomData.markModified('clients');
+    roomData.save();
 }
 
 
-//update client list at Redis
-async function updateClientRedis (roomData) {
-    try {
-        await Redis.set(roomData._id.toString(), JSON.stringify(roomData));
-    } catch (err) {
-        console.log('Error', err);
-    }
+//update client list at Redis (sync)
+function updateClientRedis (roomData) {
+    Redis.set(roomData._id.toString(), JSON.stringify(roomData));
 }
 
 
@@ -292,7 +266,7 @@ async function removeClient (clientId, roomId) {
 
 //broadcast
 function broadcast (payload, target, self, editorId) {
-    for (const [key, value] of target) {
+    for (const [key, value] of Object.entries(target)) {
         if (!self && key == editorId) {
             continue;
         } else if (clients[key] !== undefined) {
