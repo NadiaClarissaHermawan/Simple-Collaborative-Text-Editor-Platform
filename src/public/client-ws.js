@@ -71,17 +71,29 @@ ws.addEventListener('message', function message(data) {
             //move ONLY client-editor's cursor position
             if (resp.editorId === JSON.parse(document.cookie)['clientId']) {
                 const cCursor = roomData.clients[resp.editorId].cursor;
-                console.log('editors cursor updated !, line : ', resp.curLine, ' text: ',resp.text);
+                const oldCaret = cCursor['caret']; 
                 cCursor['line'] = resp.curLine;
-                notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1);
+                cCursor['caret'] = resp.caret;
+                notifyCursorUpdate(resp.editorId, cCursor['line'], cCursor['caret'], 1)
 
                 //check & move affected cursors
+                const container = document.getElementById('text-presentation');
                 for (const [key, value] of Object.entries(roomData.clients)) {
-                    if (key !== resp.editorId && value.cursor['line'] === cCursor['line'] 
-                    && value.cursor['status'] === 1
-                    && value.cursor['caret'] >= (cCursor['caret'] - 1)) {
-                        notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
-                    }
+                    if (key != resp.editorId && value.cursor['status'] == 1) {
+                        const clientElement = document.getElementById(value.cursor['line']);
+                        const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
+                        const editorElementIdx = Array.prototype.indexOf.call(container.children, lineDiv);
+                        console.log(clientElementIdx, editorElementIdx);
+                        if (clientElementIdx > editorElementIdx) {
+                            notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1);
+                        }
+                    } else if (key != resp.editorId && value.cursor['status'] == 1 && value.cursor['caret'] >= oldCaret) {
+                        if (value.cursor['line'] == cCursor['line']) {
+                            notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
+                        } else if (value.cursor['line'] == resp.lastLine && resp.lastLine != resp.curLine) {
+                            notifyCursorUpdate(key, resp.curLine, (value.cursor['caret'] - oldCaret), 1);
+                        } 
+                    } 
                 }
             }
         }
@@ -291,14 +303,11 @@ function receiveInput (event) {
 
     //adding new line div
     if (event.key === 'Enter') {
-        //TODO: aneh ini ntah kenapa si text yg keupdate itu yg ada di thennya duluan, baru yg di enterKeyHanlder
         enterKeyHandler(textarea.value, cCursor, editedLine, curRoom.room.maxLine).then((text) => {
-            cCursor['caret'] = 0;
-            curRoom.room.maxLine +=1;
-            cCursor['line'] = curRoom.room.maxLine;
-            createNewLine(editedLine, cCursor['line'], text);
-            notifyTextUpdate(text, editedLine, cCursor['line'], curRoom.room.maxLine, cCursor['caret']);
-        })
+            curRoom.room.maxLine += 1;
+            createNewLine(editedLine, curRoom.room.maxLine, text);
+            notifyTextUpdate(text, editedLine, curRoom.room.maxLine, curRoom.room.maxLine, 0);
+        });
         
     //uppercase 
     } else if (event.key === 'CapsLock' || event.key === 'Shift'){
@@ -349,7 +358,6 @@ function receiveInput (event) {
 
 // Enter key handler
 async function enterKeyHandler (text, cCursor, line, maxLine) {
-    console.log('pertama');
     //bukan di akhir line
     if ((text.length - 1) !== cCursor['caret']) {
         notifyTextUpdate(text.substring(0, cCursor['caret']), line, line, maxLine, cCursor['caret']);

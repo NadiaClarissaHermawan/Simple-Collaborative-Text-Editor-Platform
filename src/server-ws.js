@@ -82,7 +82,6 @@ socket.on('connection', function connection(ws) {
             });
 
         //notify other clients over a changed text  
-        //TODO: update text urutannya ngaco (line hasil enter baru line sblmnya)
         } else if (msg.method === 'updateText') {
             updateText(msg, roomId).then(() => {
                 const payload = {
@@ -112,6 +111,7 @@ socket.on('connection', function connection(ws) {
                         'clientId' : clientId,
                         'room' : rooms[roomId]
                     };
+                    //TODO:handler di client harus hapus cursor dari client yg left room
                     broadcast(payload, rooms[roomId].clients, true, clientId);   
                 }
                 //delete innactive client's connection
