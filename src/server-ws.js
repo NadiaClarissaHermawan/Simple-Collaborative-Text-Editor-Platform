@@ -68,11 +68,23 @@ socket.on('connection', function connection(ws) {
                     broadcast(payload, roomData.clients, false, clientId);
                 }
             });
+        
+        //notify other clients over a changed cursor position
+        } else if (msg.method === 'updateCursor') {
+            console.log('Cursor position updated by clientId:', msg.cursorId);
+            updateCursor(msg.line, msg.caret, msg.status, msg.cursorId, roomId).then(() => {
+                const payload = {
+                    'method' : 'updateCursor',
+                    'cursorId' : msg.cursorId,
+                    'clientCursor' : rooms[roomId].clients[msg.cursorId].cursor
+                };
+                broadcast(payload, rooms[roomId].clients, true, msg.cursorId);
+            });
 
         //notify other clients over a changed text  
         //TODO: update text urutannya ngaco (line hasil enter baru line sblmnya)
         } else if (msg.method === 'updateText') {
-            updateText(msg, roomId).then((roomData) => {
+            updateText(msg, roomId).then(() => {
                 const payload = {
                     'method' : 'updateText',
                     'text' : msg.text,
@@ -84,18 +96,6 @@ socket.on('connection', function connection(ws) {
                 };
                 broadcast(payload, rooms[roomId].clients, true, clientId);
             });
-
-        //notify other clients over a changed cursor position
-        } else if (msg.method === 'updateCursor') {
-            console.log('Cursor position updated by clientId:', msg.cursorId);
-            updateCursor(msg.line, msg.caret, msg.status, msg.cursorId, roomId).then((roomData) => {
-                const payload = {
-                    'method' : 'updateCursor',
-                    'cursorId' : msg.cursorId,
-                    'clientCursor' : rooms[roomId].clients.get(msg.cursorId).cursor
-                };
-                broadcast(payload, rooms[roomId].clients, true, msg.cursorId);
-            });
         }
     });
 
@@ -104,12 +104,16 @@ socket.on('connection', function connection(ws) {
         if (roomId !== null) {
             console.log('client ' + clientId + ' disconnected from room ' + roomId);
             removeClient(clientId, roomId).then((roomData) => {
-                const payload = {
-                    'method' : 'disconnect',
-                    'clientId' : clientId,
-                    'room' : rooms[roomId]
-                };
-                broadcast(payload, rooms[roomId].clients, true, clientId);   
+                if (Object.keys(roomData.clients).length === 0) {
+                    Redis.del(roomId);
+                } else {
+                    const payload = {
+                        'method' : 'disconnect',
+                        'clientId' : clientId,
+                        'room' : rooms[roomId]
+                    };
+                    broadcast(payload, rooms[roomId].clients, true, clientId);   
+                }
                 //delete innactive client's connection
                 delete clients[clientId];
             });
@@ -212,7 +216,37 @@ function updateClientRedis (roomData) {
 }
 
 
-//updateText TODO:ganti jadi redis/smth non-persistent
+//updateCursor 
+async function updateCursor (line, caret, status, clientId, roomId) {
+    const roomData = rooms[roomId];
+    roomData.clients[clientId].cursor = {
+        line : line,
+        caret : caret,
+        color : 'asdf',
+        status : status
+    };
+    //async 
+    updateCursorMongo(roomData);
+    //sync
+    await updateCursorRedis(roomData);
+}
+
+
+//update Cursor at MongoDB (async)
+function updateCursorMongo (roomData) {
+    roomData = Room.hydrate(roomData);
+    roomData.markModified('clients');
+    roomData.save();
+}
+
+
+//update Cursor at Redis (sync)
+function updateCursorRedis (roomData) {
+    Redis.set(roomData._id.toString(), JSON.stringify(roomData));
+}
+
+
+//updateText
 async function updateText (update, roomId) {
     const roomData = rooms[roomId];
     roomData.maxLine = update.maxLine;
@@ -222,45 +256,56 @@ async function updateText (update, roomId) {
         roomData.lines_order.splice(update.line_order, 0, update.curLine);
     }
 
-    roomData.lines.set((update.curLine).toString(), {
+    roomData.lines[update.curLine.toString()] = {
         text : update.text
-    });
+    };
+    console.log(roomData.lines);
 
-    try {
-        return await roomData.save();
-    } catch (err) {
-        console.log('Error', err);
-    }
+    //async
+    updateTextMongo(roomData);
+    //sync
+    await updateTextRedis(roomData);
 }
 
 
-//updateCursor TODO:ganti jadi redis/smth non-persistent
-async function updateCursor (line, caret, status, clientId, roomId) {
-    const roomData = rooms[roomId];
-    roomData.clients.get(clientId).cursor = {
-        line : line,
-        caret : caret,
-        color : 'asdf',
-        status : status
-    }
-    try {
-        return await roomData.save();
-    } catch (err) {
-        console.log('Error', err);
-    }    
+//update text on MongoDB
+function updateTextMongo (roomData) {
+    roomData = Room.hydrate(roomData);
+    roomData.markModified('lines');
+    roomData.save();
+}
+
+
+//update text on Redis
+function updateTextRedis (roomData) {
+    Redis.set(roomData._id.toString(), JSON.stringify(roomData));
 }
 
 
 //remove client
 async function removeClient (clientId, roomId) {
     const roomData = rooms[roomId];
-    roomData.clients.delete(clientId);
+    delete roomData.clients[clientId];
 
-    try {
-        return await roomData.save();
-    } catch (err) {
-        console.log('Error', err);
-    }
+    //async
+    removeClientMongo(roomData);
+    //sync
+    await removeClientRedis(roomData);
+    return roomData;
+}
+
+
+//remove client from MongoDB
+function removeClientMongo (roomData) {
+    roomData = Room.hydrate(roomData);
+    roomData.markModified('clients');
+    roomData.save();
+}
+
+
+//remove client from Redis
+function removeClientRedis (roomData) {
+    Redis.set(roomData._id.toString(), JSON.stringify(roomData));
 }
 
 
