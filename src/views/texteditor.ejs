@@ -6,7 +6,7 @@
     <div id="container-editor">
         <!-- hidden text editor -->
         <div id="textarea-wrapper" class="">
-            <textarea id="textarea" onkeyup="receiveInput(event)"></textarea>
+            <textarea id="textarea" onkeyup="receiveInputKey(event)" oninput="receiveInputText(event)"></textarea>
         </div>
         <!-- outer text editor / container -->
         <div id="text-presentation-wrapper" class="w-75 h-75 p-3 border border-dark rounded">

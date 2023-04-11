@@ -80,19 +80,24 @@ ws.addEventListener('message', function message(data) {
                 const container = document.getElementById('text-presentation');
                 for (const [key, value] of Object.entries(roomData.clients)) {
                     if (key != resp.editorId && value.cursor['status'] == 1) {
-                        const clientElement = document.getElementById(value.cursor['line']);
-                        const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
-                        const editorElementIdx = Array.prototype.indexOf.call(container.children, lineDiv);
-                        console.log(clientElementIdx, editorElementIdx);
-                        if (clientElementIdx > editorElementIdx) {
-                            notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1);
-                        }
-                    } else if (key != resp.editorId && value.cursor['status'] == 1 && value.cursor['caret'] >= oldCaret) {
-                        if (value.cursor['line'] == cCursor['line']) {
+                        //same line after 'enter' OR common same line 
+                        if (value.cursor['line'] == cCursor['line'] && (value.cursor['caret'] >= oldCaret || value.cursor['caret'] >= cCursor['caret'])) {
+                            console.log('same line');
                             notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
-                        } else if (value.cursor['line'] == resp.lastLine && resp.lastLine != resp.curLine) {
+                        //new line
+                        } else if (value.cursor['line'] == resp.lastLine && resp.lastLine != resp.curLine && value.cursor['caret'] >= oldCaret) {
+                            console.log('same line to new line');
                             notifyCursorUpdate(key, resp.curLine, (value.cursor['caret'] - oldCaret), 1);
-                        } 
+                        //affected line below
+                        } else {
+                            console.log('affected line below');
+                            const clientElement = document.getElementById(value.cursor['line']);
+                            const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
+                            const editorElementIdx = Array.prototype.indexOf.call(container.children, lineDiv);
+                            if (clientElementIdx > editorElementIdx) {
+                                notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1);
+                            }
+                        }
                     } 
                 }
             }
@@ -108,6 +113,7 @@ ws.addEventListener('message', function message(data) {
         
     // someone disconnected
     } else if (resp.method === 'disconnect') {
+        removeCursor(resp.clientId);
         clientCounter.textContent = 'clients connected : ' + Object.keys(resp.room.clients).length + '';
         console.log('client id ' + JSON.parse(document.cookie)['clientId'] + ' has disconnected.');
     }
@@ -234,6 +240,13 @@ function createNewCursor (cursorId) {
 }
 
 
+//remove disconnected client's cursor
+function removeCursor (cursorId) {
+    const cursor = document.getElementById(cursorId);
+    cursor.remove();
+}
+
+
 //getting actual click position (line, caret, x coordinate) 
 function getClickPosition (event) {
     const container = document.getElementById('text-presentation');
@@ -296,7 +309,7 @@ function updateCursor (cursorId) {
 
 
 //accept input from clients
-function receiveInput (event) {
+function receiveInputKey (event) {
     const textarea = document.getElementById('textarea');
     const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
     const editedLine = cCursor['line'];
@@ -330,30 +343,46 @@ function receiveInput (event) {
     } else if (event.key === 'ArrowUp') {
         const topDivId = document.getElementById('text-presentation').children[0].id;
         if (cCursor['line'] !== topDivId) {
-            const prevDivId = document.getElementById(cCursor['line']).previousSibling.id;
-            notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDivId, cCursor['caret'], 1);
+            const prevDiv = document.getElementById(cCursor['line']).previousSibling;
+            const prevLen = prevDiv.children[0].textContent.length;
+            if (cCursor['caret'] > prevLen) { 
+                notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevLen, 1);
+            } else {
+                notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, cCursor['caret'], 1);
+            }
         }
         
     //down
     } else if (event.key === 'ArrowDown') {
         const bottomDivElement = document.getElementById('text-presentation').lastElementChild;
         if (cCursor['line'] !== bottomDivElement.id) {
-            const nextDivId = document.getElementById(cCursor['line']).nextSibling.id;
-            notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDivId, cCursor['caret'], 1)
-        }
-
-    //alphanumeric & symbol (a-z, A-Z, 0-9)
-    } else {
-        if (event.key === 'Backspace') { 
-            if (textarea.value.length >= 0 && cCursor['caret'] > 0) { 
-                cCursor['caret'] -= 1; 
+            const nextDiv = document.getElementById(cCursor['line']).nextSibling;
+            const nextLen = nextDiv.children[0].textContent.length;
+            if (cCursor['caret'] > nextLen) { 
+                notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, nextLen, 1);
+            } else {
+                notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, cCursor['caret'], 1);
             }
-        } else { 
-            cCursor['caret'] += 1; 
         }
-        notifyTextUpdate(textarea.value, editedLine, editedLine, curRoom.room.maxLine, cCursor['caret']);
-    }
+    } 
 };
+
+
+// Oninput : update textarea content 
+// note : kenapa gapake onkeyup? kalo keynya dipress dia garealtime jatohnya 
+function receiveInputText (event) {
+    const textarea = event.target;
+    if (textarea.value.match(/\n/g) === null) {
+        const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
+        if (textarea.value.length > cCursor['caret']) {
+            const caretIncrement = textarea.value.length - cCursor['caret']; 
+            notifyTextUpdate(textarea.value, cCursor['line'], cCursor['line'], curRoom.room.maxLine, cCursor['caret'] + caretIncrement);
+        } else {
+            const caretDecrement = cCursor['caret'] - textarea.value.length;
+            notifyTextUpdate(textarea.value, cCursor['line'], cCursor['line'], curRoom.room.maxLine, cCursor['caret'] - caretDecrement); 
+        }
+    }
+}
 
 
 // Enter key handler

@@ -11,7 +11,6 @@ import Redis from './utils/db.js';
 
 //initialize server & websocket for server
 const socket = new WebSocketServer({ port : 81 });
-
 //hashmap of online client's connection (ws)
 const clients = {};
 //hashmap of loaded rooms (non-persistent)
@@ -111,7 +110,6 @@ socket.on('connection', function connection(ws) {
                         'clientId' : clientId,
                         'room' : rooms[roomId]
                     };
-                    //TODO:handler di client harus hapus cursor dari client yg left room
                     broadcast(payload, rooms[roomId].clients, true, clientId);   
                 }
                 //delete innactive client's connection
