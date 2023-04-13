@@ -2,7 +2,7 @@
 
 //Home Page
 export const Home = (req, res) => {
-    res.render('index', {
+    res.render('main', {
         title : 'main'
     });
 }

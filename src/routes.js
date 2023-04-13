@@ -1,18 +1,11 @@
 //import express
-import express from "express";
+import express from 'express';
 
 //import page controller
-import {Home, TextEditor} from "./controllers/pages.js";
+import {Home, TextEditor} from './controllers/pageController.js';
 
 //init express router
 const router = express.Router();
-
-import Room from "./models/room.js";
-// router.get('/hehe', (req, res) =>{
-//     Room.find().then((room) => {
-//         res.send(room);
-//     })
-// });
 
 //Home route
 router.get('/', Home);
