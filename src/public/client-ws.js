@@ -372,6 +372,7 @@ function receiveInputKey (event) {
 // note : kenapa gapake onkeyup? kalo keynya dipress dia garealtime jatohnya 
 function receiveInputText (event) {
     const textarea = event.target;
+    //no line enter
     if (textarea.value.match(/\n/g) === null) {
         const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
         if (textarea.value.length > cCursor['caret']) {
