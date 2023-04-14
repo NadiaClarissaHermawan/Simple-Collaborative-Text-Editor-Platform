@@ -2,7 +2,9 @@
 import express from "express";
 
 //import server 
-import socket from "./server-ws.js";
+import ServerWs from "./server-ws.js";
+const socket = new ServerWs(81);
+socket.initialize();
 
 //import router
 import Router from "./routes.js";
