@@ -1,13 +1,14 @@
 import mongoose from 'mongoose';
 import RoomController from './roomController.js';
 
-export default class ServerWsMsgController {
+export default class ServerWsController {
     constructor (clients) {
         this.clients = clients;
         this.clientId = null;
         this.roomId = null;
         this.roomController = new RoomController();
     }
+
 
     setClientId = (clientId) => {
         this.clientId = clientId;

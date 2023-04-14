@@ -375,13 +375,14 @@ function receiveInputText (event) {
     //no line enter
     if (textarea.value.match(/\n/g) === null) {
         const cCursor = curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
-        if (textarea.value.length > cCursor['caret']) {
-            const caretIncrement = textarea.value.length - cCursor['caret']; 
-            notifyTextUpdate(textarea.value, cCursor['line'], cCursor['line'], curRoom.room.maxLine, cCursor['caret'] + caretIncrement);
+        const lineText = document.getElementById(cCursor['line']).children[0].textContent;
+        let newCaret = cCursor['caret'];
+        if (textarea.value.length > lineText.length) {
+            newCaret += 1;
         } else {
-            const caretDecrement = cCursor['caret'] - textarea.value.length;
-            notifyTextUpdate(textarea.value, cCursor['line'], cCursor['line'], curRoom.room.maxLine, cCursor['caret'] - caretDecrement); 
+            newCaret -= 1;
         }
+        notifyTextUpdate(textarea.value, cCursor['line'], cCursor['line'], curRoom.room.maxLine, newCaret);
     }
 }
 

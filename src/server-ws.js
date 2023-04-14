@@ -1,7 +1,7 @@
 import e from 'express';
 import { WebSocketServer } from 'ws';
 import mongoose from 'mongoose';
-import ServerWsMsgController from './controllers/serverWsMsgController.js';
+import ServerWsController from './controllers/serverWsController.js';
 
 //socket event
 const WS_EVENT_CONNECTION = 'connection';
@@ -12,17 +12,18 @@ export default class ServerWs {
     constructor (portNumber) {
         this.clients = {};
         this.socket = new WebSocketServer({ port : portNumber });
-        this.serverWsMsgHandler = null;
+        this.serverWsHandler = null;
     }
 
+    
     //create server ws 
     initialize = () => {
         if (this.socket !== null) {
             this.socket.on(WS_EVENT_CONNECTION, this.connectionEventHandler);
         }
     };
-
     
+
     //on client connected handler
     connectionEventHandler = (ws) => {
         let roomId = null;
@@ -31,16 +32,16 @@ export default class ServerWs {
         this.clientConnected(ws, clientId);
 
         ws.on(WS_EVENT_MESSAGE, (data, isBinary) => {
-            if (this.serverWsMsgHandler === null) {
-                this.serverWsMsgHandler = new ServerWsMsgController(this.clients);
+            if (this.serverWsHandler === null) {
+                this.serverWsHandler = new ServerWsController(this.clients);
             }
 
             msg = isBinary ? data : JSON.parse(data.toString());
             if (msg.method === 'join') {
                 roomId = msg.roomId;
             }
-            this.serverWsMsgHandler.setClientId(clientId);
-            this.serverWsMsgHandler.handleMsg(msg);
+            this.serverWsHandler.setClientId(clientId);
+            this.serverWsHandler.handleMsg(msg);
         });
 
         ws.on(WS_EVENT_CLOSE, (ws) => {
@@ -66,6 +67,6 @@ export default class ServerWs {
 
     //on close handler
     clientDisconnected = (clientId, roomId) => {
-        this.serverWsMsgHandler.disconnect(clientId, roomId);
+        this.serverWsHandler.disconnect(clientId, roomId);
     }
 }

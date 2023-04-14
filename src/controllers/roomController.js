@@ -74,7 +74,7 @@ export default class RoomController {
             }
         };
         //async
-        this.updateMongo(roomData);
+        this.updateMongo(roomData, 'clients');
         //sync
         await this.updateRedis(roomData);
         return roomData;
@@ -87,7 +87,7 @@ export default class RoomController {
         delete roomData.clients[clientId];
     
         //async
-        this.updateMongo(roomData);
+        this.updateMongo(roomData, 'clients');
         //sync
         await this.updateRedis(roomData);
         return roomData;
@@ -104,7 +104,7 @@ export default class RoomController {
             status : msg.status
         };
         //async 
-        this.updateMongo(roomData);
+        this.updateMongo(roomData, 'clients');
         //sync
         await this.updateRedis(roomData);
         return roomData;
@@ -113,6 +113,7 @@ export default class RoomController {
 
     //updateText
     async updateTextData (msg, roomId) {
+        console.log('line:', msg.curLine, ', text:', msg.text);
         const roomData = JSON.parse(await this.getRoomFromRedis(roomId));
         roomData.maxLine = msg.maxLine;
     
@@ -121,12 +122,14 @@ export default class RoomController {
             roomData.lines_order.splice(msg.line_order, 0, msg.curLine);
         }
     
+        console.log('before', roomData.lines);
         roomData.lines[msg.curLine.toString()] = {
             text : msg.text
         };
+        console.log('after', roomData.lines);
     
         //async
-        this.updateMongo(roomData);
+        this.updateMongo(roomData, 'lines');
         //sync
         await this.updateRedis(roomData);
         return roomData;
@@ -134,9 +137,9 @@ export default class RoomController {
 
 
     //update Room data at MongoDB
-    updateMongo (roomData) {
+    updateMongo (roomData, mark) {
         roomData = Room.hydrate(roomData);
-        roomData.markModified('clients');
+        roomData.markModified(mark);
         roomData.save();
     }
 
