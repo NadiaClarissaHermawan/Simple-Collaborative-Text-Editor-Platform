@@ -1,8 +1,5 @@
-//import mongoose
 import mongoose from 'mongoose';
-//import Room.js (Mongoose Schema Model)
 import Room from '../models/room.js';
-//import Redis 
 import Redis from '../utils/db.js';
 
 export default class RoomController {
@@ -77,9 +74,9 @@ export default class RoomController {
             }
         };
         //async
-        this.updateDataMongo(roomData);
+        this.updateMongo(roomData);
         //sync
-        await this.updateDataRedis(roomData);
+        await this.updateRedis(roomData);
         return roomData;
     }
 
@@ -90,54 +87,54 @@ export default class RoomController {
         delete roomData.clients[clientId];
     
         //async
-        this.updateDataMongo(roomData);
+        this.updateMongo(roomData);
         //sync
-        await this.updateDataRedis(roomData);
+        await this.updateRedis(roomData);
         return roomData;
     }
 
 
     //updateCursor 
-    async updateCursorData (line, caret, status, clientId, roomId) {
+    async updateCursorData (msg, roomId) {
         const roomData = JSON.parse(await this.getRoomFromRedis(roomId)); 
-        roomData.clients[clientId].cursor = {
-            line : line,
-            caret : caret,
+        roomData.clients[msg.cursorId].cursor = {
+            line : msg.line,
+            caret : msg.caret,
             color : 'color',
-            status : status
+            status : msg.status
         };
         //async 
-        this.updateDataMongo(roomData);
+        this.updateMongo(roomData);
         //sync
-        await this.updateDataRedis(roomData);
+        await this.updateRedis(roomData);
         return roomData;
     }
 
 
     //updateText
-    async updateTextData (update, roomId) {
+    async updateTextData (msg, roomId) {
         const roomData = JSON.parse(await this.getRoomFromRedis(roomId));
-        roomData.maxLine = update.maxLine;
+        roomData.maxLine = msg.maxLine;
     
         //kalau line id blm ada di urutan kemunculan baris
-        if (roomData.lines_order[update.line_order] !== update.curLine) {
-            roomData.lines_order.splice(update.line_order, 0, update.curLine);
+        if (roomData.lines_order[msg.line_order] !== msg.curLine) {
+            roomData.lines_order.splice(msg.line_order, 0, msg.curLine);
         }
     
-        roomData.lines[update.curLine.toString()] = {
-            text : update.text
+        roomData.lines[msg.curLine.toString()] = {
+            text : msg.text
         };
     
         //async
-        this.updateDataMongo(roomData);
+        this.updateMongo(roomData);
         //sync
-        await this.updateDataRedis(roomData);
+        await this.updateRedis(roomData);
         return roomData;
     }
 
 
     //update Room data at MongoDB
-    updateDataMongo (roomData) {
+    updateMongo (roomData) {
         roomData = Room.hydrate(roomData);
         roomData.markModified('clients');
         roomData.save();
@@ -145,7 +142,7 @@ export default class RoomController {
 
 
     //update Room data at Redis
-    updateDataRedis (roomData) {
+    updateRedis (roomData) {
         Redis.set(roomData._id.toString(), JSON.stringify(roomData));
     }
 
