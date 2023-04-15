@@ -60,7 +60,7 @@ export default class ServerWsController {
                     'method' : 'join',
                     'client_status' : -1
                 };
-                this.clients['0'][this.clientId].connection.send(JSON.stringify(payload));
+                this.clients[this.clientId].connection.send(JSON.stringify(payload));
 
             } else {
                 payload = {

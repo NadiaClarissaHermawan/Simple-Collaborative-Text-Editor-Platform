@@ -41,6 +41,7 @@ export default class ServerWs {
                 roomId = msg.roomId;
             }
             this.serverWsHandler.setClientId(clientId);
+            this.serverWsHandler.setRoomId(roomId);
             this.serverWsHandler.handleMsg(msg);
         });
 

@@ -316,6 +316,7 @@ function receiveInputKey (event) {
 
     //adding new line div
     if (event.key === 'Enter') {
+        //TODO: satuin 2 notify
         enterKeyHandler(textarea.value, cCursor, editedLine, curRoom.room.maxLine).then((text) => {
             curRoom.room.maxLine += 1;
             createNewLine(editedLine, curRoom.room.maxLine, text);
