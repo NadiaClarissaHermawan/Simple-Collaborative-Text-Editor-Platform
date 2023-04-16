@@ -22,7 +22,7 @@ export default class ServerWsController {
 
     handleMsg = (msg) => {
         if (msg.method === 'create') {
-            this.roomId = this.createHandler();
+            this.roomId = this.createHandler(msg);
 
         } else if (msg.method === 'join') {
             this.roomId = msg.roomId;
@@ -38,12 +38,13 @@ export default class ServerWsController {
 
 
     //on message 'create' handler
-    createHandler = () => {
+    createHandler = (msg) => {
         this.roomId = new mongoose.Types.ObjectId();
         this.roomController.createRoom(this.roomId).then(() => {
             const payload = {
                 'method' : 'create',
-                'roomId' : this.roomId.toString()
+                'roomId' : this.roomId.toString(),
+                'name' : msg.name
             };
             this.clients[this.clientId].connection.send(JSON.stringify(payload));
         });

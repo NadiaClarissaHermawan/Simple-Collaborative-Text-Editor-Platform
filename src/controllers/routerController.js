@@ -1,11 +1,10 @@
-// import PageController from "./pageController.js";
-// let pageController = null;
-// if (pageController == null) {
-//     pageController = new PageController();
+// import ClientWsController from "./clientWsController.js";
+// let clientWsController = null;
+// if (clientWsController == null) {
+//     clientWsController = new ClientWsController();
 // }
 
 //controller untuk berganti laman
-
 //Home Page
 export const Home = (req, res) => {
     res.render('main', {
@@ -20,8 +19,13 @@ export const TextEditor = (req, res) => {
     });
 }
 
-//send button create request to client backend
-// export const CreateBtn = (req, res) => {
-//     pageController.reqCreateRoom(JSON.stringify(req.body));
-//     res.json(clientEventController.tester());
+//send create button request to client backend
+// export const CreateRoom = (req, res) => {
+//     clientWsController.setCurRoomId(req.body['roomId']);
+//     const payload = {
+//         'method' : 'join',
+//         'name' : req.body['name'],
+//         'roomId' : req.body['roomId']
+//     };
+//     res.json(payload);
 // }
