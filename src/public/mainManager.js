@@ -1,10 +1,7 @@
-class PageListener {
+class MainManager {
     constructor () {
-        this.response = null;
         this.clientWs = null;
-        this.letterWidth = 0.0;
-        this.parent = null;
-        
+        this.texteditorManager = null;
         this.setEventListener();
     }
 
@@ -69,9 +66,30 @@ class PageListener {
     }
 
 
-    tester = (msg) => {
-        console.log('tessss',msg);
+    joinPageUpdate = (msg) => {
+        if (msg.client_status === -1) {
+            alert('Wrong room code!');
+        } else {
+            //new client joins room
+            if (msg.client_status === 0) {
+                this.teManagerCheck(msg.newClient_Id, msg.room);
+                this.clientWs.setTexteditorManager(this.texteditorManager);
+            //existing client inside the room gets informational update
+            } else {
+                this.texteditorManager.setCurRoom(msg.room);
+                this.texteditorManager.createNewCursor(msg.newClient_Id);
+                document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(msg.room.clients).length + '';
+            }
+        } 
+    }
+
+
+    teManagerCheck = (clientId, roomData) => {
+        if (this.texteditorManager == null) {
+            this.texteditorManager = new TexteditorManager(this.clientWs, clientId, roomData);
+        }
+        return true;
     }
 }
 
-const pageListener = new PageListener(); 
+const mainManager = new MainManager(); 

@@ -1,22 +1,23 @@
 const WS_EVENT_MESSAGE = 'message';
 const WS_EVENT_OPEN = 'open';
-const METHOD_GET = 'get';
-const METHOD_POST = 'post';
 
 class ClientWs {
-    constructor (portNumber, pageListener) {
+    constructor (portNumber, pageManager, texteditorManager) {
+        //TODO:kalo pas hosting, localhost ganti jadi ip address dari si hostnya (tp ws:// hrs ttep ada)
         this.ws = new WebSocket('ws://localhost:' + portNumber);
-        this.curRoom = {
-            'id' : null,
-            'room' : null
-        };
-        this.pageListener = pageListener;
+        this.pageManager = pageManager;
+        this.texteditorManager = null;
         this.initialize();
     }
 
 
     initialize = () => {
         this.ws.addEventListener(WS_EVENT_MESSAGE, this.handleMsg);
+    }
+
+
+    setTexteditorManager = (texteditorManager) => {
+        this.texteditorManager = texteditorManager;
     }
 
 
@@ -29,14 +30,16 @@ class ClientWs {
             this.createRespHandler(msg);
 
         } else if (msg.method === 'join') {
-            this.joinRespHandler(msg);
+            this.pageManager.joinPageUpdate(msg);
 
         } else if (msg.method === 'updateText') {
+            this.texteditorManager.textPageUpdate(msg);
 
         } else if (msg.method === 'updateCursor') {
+            this.texteditorManager.cursorPageUpdate(msg);
 
         } else if (msg.method === 'disconnect') {
-
+            this.texteditorManager.disconnectPageUpdate(msg);
         }
     }
 
@@ -54,7 +57,6 @@ class ClientWs {
 
 
     createRespHandler = (msg) => {
-        this.curRoom['id'] = msg.roomId;
         const payload = {
             'method' : 'join',
             'name' : msg.name,
@@ -64,12 +66,6 @@ class ClientWs {
 
         // contoh kirim fetch api
         // this.sendRequest('/createroom', METHOD_POST, msg, this.sendPayload);
-    }
-
-
-    joinRespHandler = (msg) => {
-        //TODO:copy dari resp.method === 'join'
-        this.pageListener.tester(msg);
     }
 
 
@@ -83,25 +79,4 @@ class ClientWs {
             });
         } 
     }
-
-
-    //fetch API send request to routes
-    sendRequest = async (url, mtd, bdy, nextMove) => {
-        try {
-            this.response = await fetch(url, {
-                method : mtd,
-                headers : {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body : JSON.stringify(bdy)
-            });
-
-            this.response.json().then((data) => {
-                nextMove(data);
-            });
-        } catch (e) {
-            console.log('Fetch API error: ', e);
-        }
-    } 
 }
