@@ -15,7 +15,7 @@
 }
 
 #textarea-wrapper {
-    /* overflow: hidden; */
+    overflow: hidden;
     position: relative;
 }
 

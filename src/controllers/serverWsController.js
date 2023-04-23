@@ -80,32 +80,38 @@ export default class ServerWsController {
 
 
     //on message 'updateCursor' handler
-    updateCursorHandler = (msg) => {
-        this.roomController.updateCursorData(msg, this.roomId).then((roomData) => {
-            const payload = {
-                'method' : 'updateCursor',
-                'cursorId' : msg.cursorId,
-                'clientCursor' : roomData.clients[msg.cursorId].cursor
-            };
-            this.broadcast(payload, roomData.clients, true, msg.cursorId);
-        });
+    updateCursorHandler = async (msg) => {
+        let roomData = null;
+        while (roomData == null) {
+            roomData = await this.roomController.updateCursorDataRedis(msg, this.roomId);
+        }
+        this.roomController.updateMongo(roomData, 'clients');
+        const payload = {
+            'method' : 'updateCursor',
+            'cursorId' : msg.cursorId,
+            'clientCursor' : roomData.clients[msg.cursorId].cursor
+        };
+        this.broadcast(payload, roomData.clients, true, msg.cursorId);
     }
 
 
     //on message 'updateText' handler
-    updateTextHandler = (msg) => {
-        this.roomController.updateTextData(msg, this.roomId).then((roomData) => {
-            const payload = {
-                'method' : 'updateText',
-                'text' : msg.text,
-                'curLine' : msg.curLine,
-                'lastLine' : msg.lastLine,
-                'caret' : msg.caret,
-                'editorId' : this.clientId, 
-                'maxLine' : roomData.maxLine
-            };
-            this.broadcast(payload, roomData.clients, true, this.clientId);
-        });
+    updateTextHandler = async (msg) => {
+        let roomData = null;
+        while (roomData == null) {
+            roomData = await this.roomController.updateTextDataRedis(msg, this.roomId);
+        }
+        this.roomController.updateMongo(roomData, 'lines');
+        const payload = {
+            'method' : 'updateText',
+            'texts' : msg.texts,
+            'curLine' : msg.curLine,
+            'lastLine' : msg.lastLine,
+            'caret' : msg.caret,
+            'editorId' : this.clientId, 
+            'maxLine' : roomData.maxLine
+        };
+        this.broadcast(payload, roomData.clients, true, this.clientId);
     }
 
 

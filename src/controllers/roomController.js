@@ -62,6 +62,22 @@ export default class RoomController {
     }
 
 
+    //save data to redis by transaction
+    transactionToRedis (roomId, roomData) {
+        return Redis.multi()
+            .set(roomId, JSON.stringify(roomData))
+            .exec()
+            .then((reply) => {
+                console.log('ERRRRRR', reply);
+                if (reply == null) {
+                    return null;
+                } else {
+                    return roomData;
+                }
+            })
+    }
+
+
     //update client data
     async updateClientData (clientId, roomData, name) {
         roomData.clients[clientId] = {
@@ -95,44 +111,47 @@ export default class RoomController {
 
 
     //updateCursor 
-    async updateCursorData (msg, roomId) {
-        const roomData = JSON.parse(await this.getRoomFromRedis(roomId)); 
-        roomData.clients[msg.cursorId].cursor = {
-            line : msg.line,
-            caret : msg.caret,
-            color : 'color',
-            status : msg.status
-        };
-        //async 
-        this.updateMongo(roomData, 'clients');
-        //sync
-        await this.updateRedis(roomData);
-        return roomData;
+    async updateCursorDataRedis (msg, roomId) {
+        let updatedData = null;
+        const res = await Redis.watch(roomId).then((err) => {
+            return this.getRoomFromRedis(roomId).then((roomData) => {
+                updatedData = JSON.parse(roomData);
+                updatedData.clients[msg.cursorId].cursor = {
+                    line : msg.line,
+                    caret : msg.caret,
+                    color : 'color',
+                    status : msg.status
+                };
+                return this.transactionToRedis(roomId, updatedData);
+            });
+        });
+        return updatedData;
     }
 
 
     //updateText
-    async updateTextData (msg, roomId) {
-        console.log('line:', msg.curLine, ', text:', msg.text);
-        const roomData = JSON.parse(await this.getRoomFromRedis(roomId));
-        roomData.maxLine = msg.maxLine;
-    
-        //kalau line id blm ada di urutan kemunculan baris
-        if (roomData.lines_order[msg.line_order] !== msg.curLine) {
-            roomData.lines_order.splice(msg.line_order, 0, msg.curLine);
-        }
-    
-        console.log('before', roomData.lines);
-        roomData.lines[msg.curLine.toString()] = {
-            text : msg.text
-        };
-        console.log('after', roomData.lines);
-    
-        //async
-        this.updateMongo(roomData, 'lines');
-        //sync
-        await this.updateRedis(roomData);
-        return roomData;
+    async updateTextDataRedis (msg, roomId) {
+        let updatedData = null;
+        const res = await Redis.watch(roomId).then((err) => {
+            return this.getRoomFromRedis(roomId).then((roomData) => {
+                updatedData = JSON.parse(roomData);
+                updatedData.maxLine = msg.maxLine;
+
+                //kalau line id blm ada di urutan kemunculan baris
+                if (updatedData.lines_order[msg.line_order] !== msg.curLine) {
+                    updatedData.lines_order.splice(msg.line_order, 0, msg.curLine);
+                }
+
+                for (const [key, value] of Object.entries(msg.texts)) {
+                    updatedData.lines[key] = {
+                        text : value.toString()
+                    };
+                }
+                
+                return this.transactionToRedis(roomId, updatedData);
+            });
+        });
+        return updatedData;
     }
 
 

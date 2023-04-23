@@ -196,31 +196,39 @@ class TexteditorManager {
 
 
     textPageUpdate = (msg) => {
-        const lineDiv = document.getElementById(msg.curLine);
+        let text = "";
+        let lineDiv = null;
         const roomData = this.curRoom.room;
         roomData.maxLine = msg.maxLine;
 
-        //new line
-        if (lineDiv === null) {
-            this.createNewLine(msg.lastLine, msg.curLine, msg.text);
-        //receive changes on existing line & make it visible
-        } else {
-            const textElement = lineDiv.children[0];
-            textElement.textContent = msg.text;
-            document.getElementById('textarea').value = msg.text;
+        for (const [key, value] of Object.entries(msg.texts)) {
+            lineDiv = document.getElementById(key);
+            text = value;
 
-            //first character typed, measure letter width
-            if (this.letterWidth === 0.0) { this.countLetterWidth(textElement); }
+            //new line
+            if (lineDiv === null) {
+                this.createNewLine(msg.lastLine, msg.curLine, text);
+            //receive changes on existing line & make it visible
+            } else {
+                let textElement = lineDiv.children[0];
+                textElement.textContent = text; 
+                document.getElementById('textarea').value = text;
 
-            //move ONLY client-editor's cursor position
-            if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
-                const cCursor = roomData.clients[msg.editorId].cursor;
-                const oldCaret = cCursor['caret']; 
-                cCursor['line'] = msg.curLine;
-                cCursor['caret'] = msg.caret;
-                this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1);
-                this.moveAffectedCursors(roomData, msg, oldCaret, cCursor, lineDiv);
+                //first character typed, measure letter width
+                if ( this.letterWidth === 0.0 && textElement.textContent != '') { 
+                    this.countLetterWidth(textElement); 
+                }
             }
+        }
+
+        //move ONLY client-editor's cursor position
+        if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
+            const cCursor = roomData.clients[msg.editorId].cursor;
+            const oldCaret = cCursor['caret']; 
+            cCursor['line'] = msg.curLine;
+            cCursor['caret'] = msg.caret;
+            this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1);
+            this.moveAffectedCursors(roomData, msg, oldCaret, cCursor, lineDiv);
         }
     }
 
@@ -258,6 +266,7 @@ class TexteditorManager {
     // Oninput : update textarea content 
     // note : kenapa gapake onkeyup? kalo keynya dipress dia garealtime jatohnya 
     receiveInputText = (event) => {
+        let texts = {};
         const textarea = event.target;
         //no line enter
         if (textarea.value.match(/\n/g) === null) {
@@ -269,7 +278,8 @@ class TexteditorManager {
             } else {
                 newCaret -= 1;
             }
-            this.notifyTextUpdate(textarea.value, cCursor['line'], cCursor['line'], this.curRoom.room.maxLine, newCaret);
+            texts[cCursor['line']] = textarea.value;
+            this.notifyTextUpdate( texts, cCursor['line'], cCursor['line'], this.curRoom.room.maxLine, newCaret);
         }
     }
 
@@ -282,12 +292,20 @@ class TexteditorManager {
 
         //adding new line div
         if (event.key === 'Enter') {
-            //TODO: satuin 2 notify
-            this.enterKeyHandler(textarea.value, cCursor, editedLine, this.curRoom.room.maxLine).then((text) => {
-                this.curRoom.room.maxLine += 1;
-                this.createNewLine(editedLine, this.curRoom.room.maxLine, text);
-                this.notifyTextUpdate(text, editedLine, this.curRoom.room.maxLine, this.curRoom.room.maxLine, 0);
-            });
+            let texts = {};
+
+            //bukan di akhir line
+            if ((textarea.value.length - 1) !== cCursor['caret']) {
+                texts[editedLine] = textarea.value.substring(0, cCursor['caret']);
+                textarea.value = textarea.value.substring(cCursor['caret'] + 1);
+            //akhir line
+            } else {
+                textarea.value = "";
+            }
+            this.curRoom.room.maxLine += 1;
+            this.createNewLine(editedLine, this.curRoom.room.maxLine, textarea.value);
+            texts[this.curRoom.room.maxLine] = textarea.value;
+            this.notifyTextUpdate(texts, editedLine, this.curRoom.room.maxLine, this.curRoom.room.maxLine, 0);
             
         //uppercase 
         } else if (event.key === 'CapsLock' || event.key === 'Shift'){
@@ -335,26 +353,12 @@ class TexteditorManager {
     }
 
 
-    // Enter key handler
-    enterKeyHandler = async (text, cCursor, line, maxLine) => {
-        //bukan di akhir line
-        if ((text.length - 1) !== cCursor['caret']) {
-            this.notifyTextUpdate(text.substring(0, cCursor['caret']), line, line, maxLine, cCursor['caret']);
-            text = text.substring(cCursor['caret'] + 1);
-        //akhir line
-        } else {
-            text = "";
-        }
-        return text;
-    }
-
-
     //notify server over a changed text
     notifyTextUpdate = (text, lastLine, curLine, maxLine, caret) => {
         const child = document.getElementById(curLine);
         const payload = {
             'method' : 'updateText',
-            'text' : text,
+            'texts' : text,
             'curLine' : curLine,
             'lastLine' : lastLine,
             'maxLine' : maxLine,
