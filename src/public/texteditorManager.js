@@ -8,6 +8,7 @@ class TexteditorManager {
         }
         this.letterWidth = 0.0;
         this.parent = null;
+        this.interval = null;
         this.initialize();
     }
 
@@ -28,12 +29,9 @@ class TexteditorManager {
         document.getElementById('mainContainer').innerHTML = data;
         document.getElementById('roomCode').textContent = 'Room id : ' + this.curRoom.id;
         document.getElementById('clientCounter').textContent = 'clients connected : ' + Object.keys(this.curRoom.room.clients).length + '';
+        this.parent = document.getElementById('text-presentation');
         this.setEventListener();
         this.loadAllContent();
-
-        // create new cursor for this new client
-        this.createNewCursor(JSON.parse(document.cookie)['clientId']);
-        parent = document.getElementById('text-presentation');
     }
 
 
@@ -41,6 +39,8 @@ class TexteditorManager {
         document.getElementById('text-presentation').addEventListener('click', this.getClickPosition);
         document.getElementById('textarea').addEventListener('input', this.receiveInputText);
         document.getElementById('textarea').addEventListener('keyup', this.receiveInputKey);
+        window.addEventListener('resize', this.generateExistingCursors);
+        this.parent.addEventListener('scroll', this.generateExistingCursors);
     }
 
 
@@ -90,29 +90,37 @@ class TexteditorManager {
 
 
     generateExistingCursors = () => {
+        let cursor = null;
         //generate existing client cursors 
         for (const [key, value] of Object.entries(this.curRoom.room.clients)) {
-            if (key !== JSON.parse(document.cookie)['clientId']) {
+            cursor = document.getElementById(key);
+            if (cursor == null) {
                 this.createNewCursor(key);
-                this.updateCursor(key);
-                const text = document.getElementById(value.cursor['line']).children[0].textContent;
-                this.updateTextareaCaret(text, value.cursor['caret']);
             }
+            this.updateCursor(key);
         }  
     }
 
 
     //insert new client cursor
     createNewCursor = (cursorId) => {
+        const client = this.curRoom.room.clients[cursorId];
         const cursorWrapper = document.createElement('div');
         cursorWrapper.id = cursorId;
-        cursorWrapper.classList.add('none', 'cursor-wrapper');
+        cursorWrapper.classList.add('none', 'cursor-wrapper', 'init');
 
         const cursor = document.createElement('div');
         cursor.classList.add('cursor');
         cursor.innerHTML = '&nbsp';
-        cursorWrapper.appendChild(cursor);
+        cursor.style.borderLeftColor = client.cursor['color'];
 
+        const span = document.createElement('span');
+        span.textContent = client.name;
+        span.style.backgroundColor = client.cursor['color'];
+        span.classList.add('cursor-name');
+        cursor.appendChild(span);
+
+        cursorWrapper.appendChild(cursor);
         const textareaWrapper = document.getElementById('textarea-wrapper');
         textareaWrapper.parentNode.insertBefore(cursorWrapper, textareaWrapper);
     }
@@ -165,17 +173,50 @@ class TexteditorManager {
             const cursor = cursorWrapper.children[0];
             const wrapperBounding = document.getElementById('text-presentation-wrapper').getBoundingClientRect();
         
-            //update cursor position
             const cursorPosition = this.curRoom.room.clients[cursorId].cursor;
             const elementBounding = document.getElementById(cursorPosition['line']).children[0].getBoundingClientRect();
-            cursor.style.left = (elementBounding.left + (this.letterWidth * cursorPosition['caret'])) + "px";
-            cursor.style.top = (elementBounding.y - wrapperBounding.y) + "px";
+            const parentBounding = this.parent.getBoundingClientRect();
+            
+            // count new cursor position
+            let left = (elementBounding.left + (this.letterWidth * cursorPosition['caret']));
+            let top = (elementBounding.y - wrapperBounding.y);
+            let visible = true;
 
-            if (cursorWrapper.classList.contains('none')) {
-                cursorWrapper.classList.remove('none');
+            // cek posisi mentok cursor & update cursor position
+            if (left < parentBounding.right && left >= parentBounding.left) { cursor.style.left = left + "px"; } 
+            else { visible = false; }
+            if (top < this.parent.offsetHeight && top > this.parent.offsetTop) { cursor.style.top = top + "px"; } 
+            else { visible = false; }
+
+            // if (visible) { console.log(visible); cursorWrapper.classList.remove('none'); } 
+            // else { cursorWrapper.classList.add('none'); }
+
+            if (cursorId == JSON.parse(document.cookie)['clientId']) {
+                //kedap kedip cursor
+                if (this.interval == null && visible) {
+                    this.interval = setInterval(this.cursorInterval, 500);
+                } else if (this.interval != null && !visible) {
+                    clearInterval(this.interval);
+                    this.interval = null;
+                    cursorWrapper.classList.add('none');
+                }
+            } else {
+                if (visible) { cursorWrapper.classList.remove('none'); } 
+                else { cursorWrapper.classList.add('none'); }
             }
         }
     }
+
+
+    //change cursor visibility every 1 seconds
+    cursorInterval = () => {
+        const cursorWrapper = document.getElementById(JSON.parse(document.cookie)['clientId']);
+        if (cursorWrapper.classList.contains('none')) {
+            cursorWrapper.classList.remove('none');
+        } else {
+            cursorWrapper.classList.add('none');
+        }
+    };
 
 
     //update textarea selection range (caret)
@@ -242,7 +283,13 @@ class TexteditorManager {
                 //same line after 'enter' OR common same line 
                 if (value.cursor['line'] == cCursor['line'] && 
                 (value.cursor['caret'] >= oldCaret || value.cursor['caret'] >= cCursor['caret'])) {
-                    this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
+                    //backspace
+                    if (cCursor['caret'] < oldCaret) {
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1);
+                    //letter increment
+                    } else {
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
+                    }
 
                 //new line
                 } else if (value.cursor['line'] == msg.lastLine && 
@@ -293,7 +340,6 @@ class TexteditorManager {
         //adding new line div
         if (event.key === 'Enter') {
             let texts = {};
-
             //bukan di akhir line
             if ((textarea.value.length - 1) !== cCursor['caret']) {
                 texts[editedLine] = textarea.value.substring(0, cCursor['caret']);
@@ -307,7 +353,7 @@ class TexteditorManager {
             texts[this.curRoom.room.maxLine] = textarea.value;
             this.notifyTextUpdate(texts, editedLine, this.curRoom.room.maxLine, this.curRoom.room.maxLine, 0);
             
-        //uppercase 
+        //uppercase /symbols
         } else if (event.key === 'CapsLock' || event.key === 'Shift'){
             event.preventDefault();
 
@@ -363,7 +409,7 @@ class TexteditorManager {
             'lastLine' : lastLine,
             'maxLine' : maxLine,
             'caret' : caret,
-            'line_order' : Array.prototype.indexOf.call(parent.children, child)
+            'line_order' : Array.prototype.indexOf.call(this.parent.children, child)
         };
         this.clientWs.sendPayload(payload);
     }

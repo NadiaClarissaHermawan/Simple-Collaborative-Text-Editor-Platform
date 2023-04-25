@@ -14,6 +14,14 @@
     line-height: 1.5;
 }
 
+.cursor-name {
+    font-size: 0.7em;
+    top: -1em;
+    position: absolute;
+    border-radius: 0.5em;
+    padding: 0.1em;
+}
+
 #textarea-wrapper {
     overflow: hidden;
     position: relative;
@@ -34,6 +42,17 @@
 #text-presentation {
     z-index: 2;
     position: relative;
+    overflow: scroll;
+}
+
+#text-presentation::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+#text-presentation::-webkit-scrollbar-thumb {
+    background: #D0D0D0;
+    border-radius: 0.5em;
 }
 
 .line {

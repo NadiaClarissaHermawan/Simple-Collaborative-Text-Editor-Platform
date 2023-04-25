@@ -6,7 +6,7 @@ export default class RoomController {
     constructor () {}
 
     //create new room
-    async createRoom (roomId) {
+    createRoom = async (roomId) => {
         const roomData = {
             _id : roomId,
             maxLine : 1,
@@ -23,7 +23,7 @@ export default class RoomController {
 
 
     //join room  
-    async joinRoom (clientId, name, roomId) {
+    joinRoom = async (clientId, name, roomId) => {
         let roomData = await this.getRoomFromRedis(roomId);
         //blm ada di Redis --> ambil ke Mongo
         if (roomData === null) {
@@ -41,7 +41,7 @@ export default class RoomController {
 
     
     //get existing room data from MongoDB
-    getRoomFromMongo (roomId) {
+    getRoomFromMongo = (roomId) => {
         if (mongoose.Types.ObjectId.isValid(roomId)) {
             try {
                 const roomObjId = mongoose.Types.ObjectId.createFromHexString(roomId);
@@ -56,17 +56,20 @@ export default class RoomController {
 
 
     //get existing room data from Redis
-    getRoomFromRedis (roomId) {
+    getRoomFromRedis = (roomId) => {
         let roomData = Redis.get(roomId);
         return roomData;
     }
 
 
     //save data to redis by transaction
-    transactionToRedis (roomId, roomData) {
+    transactionToRedis = (roomId, roomData) => {
         return Redis.multi()
             .set(roomId, JSON.stringify(roomData))
             .exec()
+            .catch((err) => {
+                console.log('err', err);
+            })
             .then((reply) => {
                 console.log('ERRRRRR', reply);
                 if (reply == null) {
@@ -79,13 +82,13 @@ export default class RoomController {
 
 
     //update client data
-    async updateClientData (clientId, roomData, name) {
+    updateClientData = async (clientId, roomData, name) => {
         roomData.clients[clientId] = {
             name : name,
             cursor : {
                 line : 1,
                 caret : 0,
-                color : "0",
+                color : this.colorRandomizer(),
                 status : 0
             }
         };
@@ -97,8 +100,14 @@ export default class RoomController {
     }
 
 
+    //color randomizer
+    colorRandomizer = () => {
+        return "#" + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0').toUpperCase();
+    }
+
+
     //remove client data
-    async removeClientData (clientId, roomId) {
+    removeClientData = async (clientId, roomId) => {
         const roomData = JSON.parse(await this.getRoomFromRedis(roomId));
         delete roomData.clients[clientId];
     
@@ -111,17 +120,15 @@ export default class RoomController {
 
 
     //updateCursor 
-    async updateCursorDataRedis (msg, roomId) {
+    updateCursorDataRedis = async (msg, roomId) => {
         let updatedData = null;
         const res = await Redis.watch(roomId).then((err) => {
             return this.getRoomFromRedis(roomId).then((roomData) => {
                 updatedData = JSON.parse(roomData);
-                updatedData.clients[msg.cursorId].cursor = {
-                    line : msg.line,
-                    caret : msg.caret,
-                    color : 'color',
-                    status : msg.status
-                };
+                let udClientCursor = updatedData.clients[msg.cursorId].cursor;
+                udClientCursor['line'] = msg.line;
+                udClientCursor['caret'] = msg.caret;
+                udClientCursor['status'] = msg.status;
                 return this.transactionToRedis(roomId, updatedData);
             });
         });
@@ -130,7 +137,7 @@ export default class RoomController {
 
 
     //updateText
-    async updateTextDataRedis (msg, roomId) {
+    updateTextDataRedis = async (msg, roomId) => {
         let updatedData = null;
         const res = await Redis.watch(roomId).then((err) => {
             return this.getRoomFromRedis(roomId).then((roomData) => {
@@ -156,7 +163,7 @@ export default class RoomController {
 
 
     //update Room data at MongoDB
-    updateMongo (roomData, mark) {
+    updateMongo = (roomData, mark) => {
         roomData = Room.hydrate(roomData);
         roomData.markModified(mark);
         roomData.save();
@@ -164,13 +171,13 @@ export default class RoomController {
 
 
     //update Room data at Redis
-    updateRedis (roomData) {
+    updateRedis = (roomData) => {
         Redis.set(roomData._id.toString(), JSON.stringify(roomData));
     }
 
 
     //remove Room data from Redis 
-    removeRoomFromRedis (roomId) {
+    removeRoomFromRedis = (roomId) => {
         Redis.del(roomId);
     }
 }
