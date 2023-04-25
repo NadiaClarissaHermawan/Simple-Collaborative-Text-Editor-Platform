@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Room from '../models/room.js';
 import Redis from '../utils/db.js';
+import { WatchError } from 'redis';
 
 export default class RoomController {
     constructor () {}
@@ -17,26 +18,30 @@ export default class RoomController {
             await Room.create(roomData);
             return roomData;
         } catch (err) {
-            console.log('Error', err);
+            console.log('RoomController create error', err);
         }
     }
 
 
     //join room  
     joinRoom = async (clientId, name, roomId) => {
-        let roomData = await this.getRoomFromRedis(roomId);
+        let roomData = await Redis.get(roomId);
         //blm ada di Redis --> ambil ke Mongo
         if (roomData === null) {
             roomData = await this.getRoomFromMongo(roomId);
             if (roomData === null) {
                 return null;
             } else {
-                return this.updateClientData(clientId, roomData, name);
+                this.updateRedis(roomData);
             }
-        //sdh ada di Redis
-        } else {
-            return this.updateClientData(clientId, JSON.parse(roomData), name);
         }
+        
+        let updatedData = null;
+        while (updatedData == null) {
+            updatedData = await this.updateClientData(clientId, roomId, name);
+        }
+        this.updateMongo(updatedData, 'clients');
+        return updatedData;
     }
 
     
@@ -55,48 +60,38 @@ export default class RoomController {
     }
 
 
-    //get existing room data from Redis
+    //get existing room data from Redis TODO: lakukan get dari isolatedClient
     getRoomFromRedis = (roomId) => {
         let roomData = Redis.get(roomId);
         return roomData;
     }
 
 
-    //save data to redis by transaction
-    transactionToRedis = (roomId, roomData) => {
-        return Redis.multi()
-            .set(roomId, JSON.stringify(roomData))
-            .exec()
-            .catch((err) => {
-                console.log('err', err);
-            })
-            .then((reply) => {
-                console.log('ERRRRRR', reply);
-                if (reply == null) {
-                    return null;
-                } else {
-                    return roomData;
-                }
-            })
-    }
-
-
     //update client data
-    updateClientData = async (clientId, roomData, name) => {
-        roomData.clients[clientId] = {
-            name : name,
-            cursor : {
-                line : 1,
-                caret : 0,
-                color : this.colorRandomizer(),
-                status : 0
+    updateClientData = async (clientId, roomId, name) => {
+        let updatedData = null;
+        try {
+            return await Redis.executeIsolated(async isolatedClient => {
+                await isolatedClient.watch(roomId);
+
+                updatedData = JSON.parse(await isolatedClient.get(roomId));
+                updatedData.clients[clientId] = {
+                    name : name,
+                    cursor : {
+                        line : 1,
+                        caret : 0,
+                        color : this.colorRandomizer(),
+                        status : 0
+                    }
+                };
+                return this.transactionToRedis(roomId, updatedData, isolatedClient);
+            });
+        } catch (err) {
+            //transaction aborted
+            if (err instanceof WatchError) {
+                return null;
             }
-        };
-        //async
-        this.updateMongo(roomData, 'clients');
-        //sync
-        await this.updateRedis(roomData);
-        return roomData;
+        }
     }
 
 
@@ -108,57 +103,75 @@ export default class RoomController {
 
     //remove client data
     removeClientData = async (clientId, roomId) => {
-        const roomData = JSON.parse(await this.getRoomFromRedis(roomId));
-        delete roomData.clients[clientId];
-    
-        //async
-        this.updateMongo(roomData, 'clients');
-        //sync
-        await this.updateRedis(roomData);
-        return roomData;
+        let updatedData = null;
+        try {
+            return await Redis.executeIsolated(async isolatedClient => {
+                await isolatedClient.watch(roomId);
+
+                updatedData = JSON.parse(await isolatedClient.get(roomId));
+                delete updatedData.clients[clientId];
+
+                return this.transactionToRedis(roomId, updatedData, isolatedClient);
+            })
+        } catch (err) {
+            //transaction aborted
+            if (err instanceof WatchError) {
+                return null;
+            }
+        }
     }
 
 
     //updateCursor 
     updateCursorDataRedis = async (msg, roomId) => {
         let updatedData = null;
-        const res = await Redis.watch(roomId).then((err) => {
-            return this.getRoomFromRedis(roomId).then((roomData) => {
-                updatedData = JSON.parse(roomData);
+        try {
+            return await Redis.executeIsolated(async isolatedClient => {
+                await isolatedClient.watch(roomId);
+
+                updatedData = JSON.parse(await isolatedClient.get(roomId));
                 let udClientCursor = updatedData.clients[msg.cursorId].cursor;
                 udClientCursor['line'] = msg.line;
                 udClientCursor['caret'] = msg.caret;
                 udClientCursor['status'] = msg.status;
-                return this.transactionToRedis(roomId, updatedData);
+                return this.transactionToRedis(roomId, updatedData, isolatedClient);
             });
-        });
-        return updatedData;
+        } catch (err) {
+            //transaction aborted
+            if (err instanceof WatchError) {
+                return null;
+            }
+        }
     }
 
 
     //updateText
     updateTextDataRedis = async (msg, roomId) => {
         let updatedData = null;
-        const res = await Redis.watch(roomId).then((err) => {
-            return this.getRoomFromRedis(roomId).then((roomData) => {
-                updatedData = JSON.parse(roomData);
+        try {
+            return await Redis.executeIsolated(async isolatedClient => {
+                await isolatedClient.watch(roomId);
+
+                updatedData = JSON.parse(await isolatedClient.get(roomId));
                 updatedData.maxLine = msg.maxLine;
 
                 //kalau line id blm ada di urutan kemunculan baris
                 if (updatedData.lines_order[msg.line_order] !== msg.curLine) {
                     updatedData.lines_order.splice(msg.line_order, 0, msg.curLine);
                 }
-
                 for (const [key, value] of Object.entries(msg.texts)) {
                     updatedData.lines[key] = {
                         text : value.toString()
                     };
                 }
-                
-                return this.transactionToRedis(roomId, updatedData);
+                return this.transactionToRedis(roomId, updatedData, isolatedClient);
             });
-        });
-        return updatedData;
+        } catch (err) {
+            //transaction aborted
+            if (err instanceof WatchError) {
+                return null;
+            }
+        }
     }
 
 
@@ -167,6 +180,24 @@ export default class RoomController {
         roomData = Room.hydrate(roomData);
         roomData.markModified(mark);
         roomData.save();
+    }
+
+
+    //save data to redis by transaction
+    transactionToRedis = (roomId, roomData, isolatedClient) => {
+        return isolatedClient.multi()
+            .set(roomId, JSON.stringify(roomData))
+            .exec()
+            .catch((err) => {
+                console.log('transaction err', err);
+            })
+            .then((reply) => {
+                if (reply == null) {
+                    return null;
+                } else {
+                    return roomData;
+                }
+            })
     }
 
 

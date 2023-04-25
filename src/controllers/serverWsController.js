@@ -116,21 +116,25 @@ export default class ServerWsController {
 
 
     //on client disconnected handler
-    disconnect = (clientId, roomId) => {
-        this.roomController.removeClientData(clientId, roomId).then((roomData) => {
-            if (Object.keys(roomData.clients).length === 0) {
-                this.roomController.removeRoomFromRedis(roomId);
-            } else {
-                const payload = {
-                    'method' : 'disconnect',
-                    'clientId' : clientId,
-                    'room' : roomData
-                };
-                this.broadcast(payload, roomData.clients, true, clientId);   
-            }
-            //delete innactive client's connection
-            delete this.clients[clientId];
-        });
+    disconnect = async (clientId, roomId) => {
+        let roomData = null;
+        while (roomData == null) {
+            roomData = await this.roomController.removeClientData(clientId, roomId);
+        }
+        this.roomController.updateMongo(roomData, 'clients');
+        
+        if (Object.keys(roomData.clients).length === 0) {
+            this.roomController.removeRoomFromRedis(roomId);
+        } else {
+            const payload = {
+                'method' : 'disconnect',
+                'clientId' : clientId,
+                'room' : roomData
+            };
+            this.broadcast(payload, roomData.clients, true, clientId);   
+        }
+        //delete innactive client's connection
+        delete this.clients[clientId];
     }
 
 
