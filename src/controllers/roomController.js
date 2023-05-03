@@ -196,20 +196,18 @@ export default class RoomController {
     }
 
 
-    //TODO:baru bisa merge 1 line request
     //merge data if race condition requests happen
     mergeData = (msg, roomData) => {
         const oldtexts = msg.oldtexts;
         const newtexts = msg.texts;
 
-        //1 line modif
+        //same line
         if (Object.keys(oldtexts).length == 1) {
             let idx = msg.caret, idx2 = null;
             let servertext = Object.values(roomData)[0].text;
             let servertextlength = servertext.length;
 
             if (msg.caret > servertextlength) { idx = servertextlength; }
-
             //letter increment
             if (Object.values(oldtexts)[0].length < Object.values(newtexts)[0].length) {
                 roomData.lines[msg.line].text = servertext.substring(0, idx) + Object.values(newtexts)[0].substring(msg.caret - 1, msg.caret);
@@ -219,16 +217,29 @@ export default class RoomController {
                 roomData.lines[msg.line].text = servertext.substring(0, idx);
                 idx2 = idx + 1;
             }
-
             //buntut string
             if (idx2 < servertextlength) { roomData.lines[msg.line].text += servertext.substring(idx2); }
 
-        //2 line modif
+        //new line
         } else {
-            console.log('belum bisa merge 2 line');
-            // for (const [index, [key, value]] of Object.entries(Object.entries(oldtexts))) {
-                
-            // }
+            let lineid = msg.curLine;
+            //line id already exist
+            if (roomData.lines[lineid] != undefined) { 
+                roomData.maxLine += 1;
+                lineid = roomData.maxLine;
+            } 
+            let lineorder = roomData.lines_order.indexOf(msg.lastLine);
+            roomData.lines[lineid] = { text : '' }
+
+            //front line-space
+            if (Object.values(newtexts)[0] == '') {
+                console.log('FRONT LINE-SPACE');
+                roomData.lines_order.splice(lineorder, 0, lineid);
+            //end/mid line-space
+            } else {
+                console.log('END/MID LINE-SPACE');
+                roomData.lines_order.splice(lineorder + 1, 0, lineid);    
+            } 
         } 
         return roomData;
     }
