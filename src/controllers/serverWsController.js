@@ -97,6 +97,11 @@ export default class ServerWsController {
 
     //on message 'updateText' handler
     updateTextHandler = async (msg) => {
+        //TODO:hapus ini nanti
+        console.log('ServerWSController updateTextHandler');
+        console.log('old texts: ', msg.oldtexts);
+        console.log('new texts: ', msg.texts);
+        console.log('all msg', JSON.stringify(msg));
         let roomData = null;
         while (roomData == null) {
             roomData = await this.roomController.updateTextDataRedis(msg, this.roomId);
@@ -104,6 +109,7 @@ export default class ServerWsController {
         this.roomController.updateMongo(roomData, 'lines');
         const payload = {
             'method' : 'updateText',
+            'oldtexts' : msg.oldtexts,
             'texts' : msg.texts,
             'curLine' : msg.curLine,
             'lastLine' : msg.lastLine,

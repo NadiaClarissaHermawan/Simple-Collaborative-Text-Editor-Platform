@@ -12,7 +12,7 @@ export default class RoomController {
             _id : roomId,
             maxLine : 1,
             clients : {},
-            lines : {}
+            lines : { '1' : { text : '' } }
         };
         try {
             await Room.create(roomData);
@@ -151,18 +151,26 @@ export default class RoomController {
         try {
             return await Redis.executeIsolated(async isolatedClient => {
                 await isolatedClient.watch(roomId);
-
                 updatedData = JSON.parse(await isolatedClient.get(roomId));
-                updatedData.maxLine = msg.maxLine;
-
-                //kalau line id blm ada di urutan kemunculan baris
-                if (updatedData.lines_order[msg.line_order] !== msg.curLine) {
-                    updatedData.lines_order.splice(msg.line_order, 0, msg.curLine);
-                }
-                for (const [key, value] of Object.entries(msg.texts)) {
-                    updatedData.lines[key] = {
-                        text : value.toString()
-                    };
+                
+                let claims = this.checkClaims(msg.oldtexts, updatedData.lines);
+                console.log('msg',msg);
+                console.log('updatedData',updatedData);
+                if (!claims) {
+                    console.log('claims salah');
+                    updatedData = this.mergeData(msg, updatedData);
+                } else {
+                    console.log('claims benar');
+                    updatedData.maxLine = msg.maxLine;
+                    //kalau line id blm ada di urutan kemunculan baris
+                    if (updatedData.lines_order[msg.line_order] !== msg.curLine) {
+                        updatedData.lines_order.splice(msg.line_order, 0, msg.curLine);
+                    }
+                    for (const [key, value] of Object.entries(msg.texts)) {
+                        updatedData.lines[key] = {
+                            text : value.toString()
+                        };
+                    }
                 }
                 return this.transactionToRedis(roomId, updatedData, isolatedClient);
             });
@@ -172,6 +180,57 @@ export default class RoomController {
                 return null;
             }
         }
+    }
+
+
+    //check data claims
+    checkClaims = (oldtexts, servertexts) => {
+        let res = true;
+        for (const [index, [key, value]] of Object.entries(Object.entries(oldtexts))) {
+            if ((value == null && servertexts[key] != undefined) || 
+            (Object.keys(servertexts).length > 0 && servertexts[key] != undefined && value != servertexts[key].text)) {
+                res = false;
+            }
+        }
+        return res;
+    }
+
+
+    //TODO:baru bisa merge 1 line request
+    //merge data if race condition requests happen
+    mergeData = (msg, roomData) => {
+        const oldtexts = msg.oldtexts;
+        const newtexts = msg.texts;
+
+        //1 line modif
+        if (Object.keys(oldtexts).length == 1) {
+            let idx = msg.caret, idx2 = null;
+            let servertext = Object.values(roomData)[0].text;
+            let servertextlength = servertext.length;
+
+            if (msg.caret > servertextlength) { idx = servertextlength; }
+
+            //letter increment
+            if (Object.values(oldtexts)[0].length < Object.values(newtexts)[0].length) {
+                roomData.lines[msg.line].text = servertext.substring(0, idx) + Object.values(newtexts)[0].substring(msg.caret - 1, msg.caret);
+                idx2 = idx;
+            //letter decrement
+            } else {
+                roomData.lines[msg.line].text = servertext.substring(0, idx);
+                idx2 = idx + 1;
+            }
+
+            //buntut string
+            if (idx2 < servertextlength) { roomData.lines[msg.line].text += servertext.substring(idx2); }
+
+        //2 line modif
+        } else {
+            console.log('belum bisa merge 2 line');
+            // for (const [index, [key, value]] of Object.entries(Object.entries(oldtexts))) {
+                
+            // }
+        } 
+        return roomData;
     }
 
 
@@ -197,7 +256,7 @@ export default class RoomController {
                 } else {
                     return roomData;
                 }
-            })
+            });
     }
 
 
