@@ -159,6 +159,7 @@ export default class RoomController {
                 if (!claims) {
                     console.log('claims salah');
                     updatedData = this.mergeData(msg, updatedData);
+                    console.log('updatedData', updatedData);
                 } else {
                     console.log('claims benar');
                     updatedData.maxLine = msg.maxLine;
@@ -203,22 +204,22 @@ export default class RoomController {
 
         //same line
         if (Object.keys(oldtexts).length == 1) {
-            let idx = msg.caret, idx2 = null;
-            let servertext = Object.values(roomData)[0].text;
+            let idx = msg.caret - 1, idx2 = null;
+            let servertext = roomData.lines[Object.keys(oldtexts)[0]].text;
             let servertextlength = servertext.length;
 
             if (msg.caret > servertextlength) { idx = servertextlength; }
             //letter increment
             if (Object.values(oldtexts)[0].length < Object.values(newtexts)[0].length) {
-                roomData.lines[msg.line].text = servertext.substring(0, idx) + Object.values(newtexts)[0].substring(msg.caret - 1, msg.caret);
+                roomData.lines[msg.curLine].text = servertext.substring(0, idx) + Object.values(newtexts)[0].substring(msg.caret - 1, msg.caret);
                 idx2 = idx;
             //letter decrement
             } else {
-                roomData.lines[msg.line].text = servertext.substring(0, idx);
+                roomData.lines[msg.curLine].text = servertext.substring(0, idx);
                 idx2 = idx + 1;
             }
             //buntut string
-            if (idx2 < servertextlength) { roomData.lines[msg.line].text += servertext.substring(idx2); }
+            if (idx2 < servertextlength) { roomData.lines[msg.curLine].text += servertext.substring(idx2); }
 
         //new line
         } else {
