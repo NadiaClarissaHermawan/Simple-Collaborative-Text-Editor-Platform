@@ -55,7 +55,7 @@ class TexteditorManager {
         let text = "";
         for (let [index, value] of this.curRoom.room.lines_order.entries()) {
             text = this.curRoom.room.lines[value].text;
-            this.createNewLine(this.curRoom.room.lines_order[index-1], value, text);
+            this.createNewLine(this.curRoom.room.lines_order[index-1], value, text, 1);
 
             //textwidth 
             if (this.letterWidth === 0.0 && text.length > 0) { 
@@ -66,18 +66,35 @@ class TexteditorManager {
 
 
     //create new line div
-    createNewLine = (lastLineId, curLineId, textValue) => {
+    createNewLine = (lastLineId, curLineId, textValue, where) => {
         if (lastLineId === undefined) {
             document.getElementById(curLineId).children[0].textContent = textValue;
         } else {
-            const lastLineDiv = document.getElementById(lastLineId);
+            let lastLineDiv = null;
             const lineDiv = document.createElement('div');
             const linePre = document.createElement('pre');
             linePre.textContent = textValue;
-            lineDiv.id = curLineId;
-            lineDiv.classList.add('line');
-            lineDiv.appendChild(linePre);
-            lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling); 
+
+            console.log('createline\ncurLine:', curLineId, 'lastLineId:', lastLineId);
+
+            //dibawahnya
+            if (where == 1) {
+                console.log('dibawah');
+                lineDiv.id = curLineId;
+                lineDiv.classList.add('line');
+                lineDiv.appendChild(linePre);
+                lastLineDiv = document.getElementById(lastLineId);
+                lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling);
+            //diatasnya
+            } else {
+                console.log('diatas');
+                lineDiv.id = lastLineId;
+                lineDiv.classList.add('line');
+                lineDiv.appendChild(linePre);
+                lastLineDiv = document.getElementById(curLineId);
+                console.log('lastlinediv', lastLineDiv);
+                lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv);
+            }  
         }
     }
 
@@ -221,7 +238,6 @@ class TexteditorManager {
     updateTextareaCaret = (text, caret) => {
         //move focus to textarea 
         const textarea = document.getElementById('textarea');
-        console.log('COBA:', textarea.value, text);
         textarea.value = text;
         textarea.setSelectionRange(caret, caret);
         textarea.focus();
@@ -250,8 +266,8 @@ class TexteditorManager {
             text = value;
 
             //new line
-            if (lineDiv === null) {
-                this.createNewLine(msg.lastLine, msg.curLine, text);
+            if (lineDiv == null) {
+                this.createNewLine(msg.lastLine, msg.curLine, text, msg.where);
             //receive changes on existing line & make it visible
             } else {
                 let textElement = lineDiv.children[0];
@@ -281,10 +297,10 @@ class TexteditorManager {
         for (const [key, value] of Object.entries(roomData.clients)) {
             if (key != msg.editorId && value.cursor['status'] == 1) {
                 //same line after 'enter' OR common same line 
-                if (value.cursor['line'] == cCursor['line'] && 
-                (value.cursor['caret'] >= oldCaret || value.cursor['caret'] >= cCursor['caret'])) {
+                if (msg.lastLine == msg.curLine && value.cursor['line'] == cCursor['line'] && 
+                (value.cursor['caret'] >= oldCaret)) {
                     //backspace
-                    if (value.cursor['caret'] < oldCaret) {
+                    if (cCursor['caret'] < oldCaret) {
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1, 0);
                     //letter increment
                     } else {
@@ -319,10 +335,9 @@ class TexteditorManager {
         if (textarea.value.match(/\n/g) === null) {
             const cCursor = this.curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
             const lineText = document.getElementById(cCursor['line']).children[0].textContent;
-            cCursor['caret'] = textarea.selectionStart;
             texts[cCursor['line']] = textarea.value;
             oldtexts[cCursor['line']] = lineText;
-            setTimeout(this.notifyTextUpdate(oldtexts, texts, cCursor['line'], cCursor['line'], this.curRoom.room.maxLine, cCursor['caret']), 10000);
+            setTimeout(this.notifyTextUpdate(oldtexts, texts, cCursor['line'], cCursor['line'], this.curRoom.room.maxLine, textarea.selectionStart, -1), 10000);
         }
     }
 
@@ -335,23 +350,36 @@ class TexteditorManager {
 
         //adding new line div
         if (event.key === 'Enter') {
-            let texts = {}, oldtexts = {};
+            let texts = {}, oldtexts = {}, where = 1;
+            this.curRoom.room.maxLine += 1;
+            let lastLine = editedLine, curLine = this.curRoom.room.maxLine;
             oldtexts[editedLine] = document.getElementById(cCursor['line']).children[0].textContent;
+            oldtexts[this.curRoom.room.maxLine] = null;
 
-            //bukan di akhir line
-            if ((textarea.value.length - 1) !== cCursor['caret']) {
-                texts[editedLine] = textarea.value.substring(0, cCursor['caret']);
-                textarea.value = textarea.value.substring(cCursor['caret'] + 1);
+            //awal line
+            if (cCursor['caret'] == 0) {
+                console.log('AWAL');
+                texts[this.curRoom.room.maxLine] = '';
+                texts[editedLine] = oldtexts[editedLine];
+                textarea.value = oldtexts[editedLine];
+                where = 0; 
+                lastLine = this.curRoom.room.maxLine;
+                curLine = editedLine;
             //akhir line
-            } else {
+            } else if (cCursor['caret'] == textarea.value.length) {
+                console.log('AKHIR');
+                texts[this.curRoom.room.maxLine] = '';
                 texts[editedLine] = oldtexts[editedLine];
                 textarea.value = "";
+            //mid line
+            } else {
+                console.log('MID');
+                texts[editedLine] = textarea.value.substring(0, cCursor['caret']);
+                textarea.value = textarea.value.substring(cCursor['caret'] + 1);
+                texts[this.curRoom.room.maxLine] = textarea.value;
             }
-            this.curRoom.room.maxLine += 1;
-            this.createNewLine(editedLine, this.curRoom.room.maxLine, textarea.value);
-            texts[this.curRoom.room.maxLine] = textarea.value;
-            oldtexts[this.curRoom.room.maxLine] = null;
-            setTimeout(this.notifyTextUpdate(oldtexts, texts, editedLine, this.curRoom.room.maxLine, this.curRoom.room.maxLine, 0), 10000);
+            this.createNewLine(lastLine, curLine, textarea.value, where);
+            setTimeout(this.notifyTextUpdate(oldtexts, texts, lastLine, curLine, this.curRoom.room.maxLine, 0, where), 10000);
             
         //uppercase /symbols
         } else if (event.key === 'CapsLock' || event.key === 'Shift'){
@@ -410,10 +438,10 @@ class TexteditorManager {
 
 
     //notify server over a changed text
-    notifyTextUpdate = (oldtexts, texts, lastLine, curLine, maxLine, caret) => {
-        console.log('input kirim ke server');
-        console.log('texts:', texts, 'curLine:', curLine, 'caret:', caret);
-        const child = document.getElementById(curLine);
+    notifyTextUpdate = (oldtexts, texts, lastLine, curLine, maxLine, caret, where) => {
+        let child = document.getElementById(curLine);
+        if (where == 0) { child = document.getElementById(lastLine); }
+        console.log('send to server, curline:', curLine, 'lastline:', lastLine);
         const payload = {
             'method' : 'updateText',
             'oldtexts' : oldtexts,
@@ -423,7 +451,8 @@ class TexteditorManager {
             'maxLine' : maxLine,
             'caret' : caret,
             'line_order' : Array.prototype.indexOf.call(this.parent.children, child),
-            'editorId' : JSON.parse(document.cookie)['clientId']
+            'editorId' : JSON.parse(document.cookie)['clientId'],
+            'where' : where
         };
         this.clientWs.sendPayload(payload);
     }

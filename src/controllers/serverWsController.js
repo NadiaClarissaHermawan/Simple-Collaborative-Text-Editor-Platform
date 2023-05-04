@@ -119,7 +119,8 @@ export default class ServerWsController {
             'caret' : msg.caret,
             'editorId' : this.clientId, 
             'maxLine' : result.roomData.maxLine,
-            'clients' : result.roomData.clients
+            'clients' : result.roomData.clients,
+            'where' : msg.where
         };
         this.broadcast(payload, result.roomData.clients, true, this.clientId);
     }
