@@ -239,6 +239,10 @@ class TexteditorManager {
         let lineDiv = null;
         const roomData = this.curRoom.room;
         roomData.maxLine = msg.maxLine;
+        
+        // const cCursor = roomData.clients[msg.editorId].cursor;
+        const oldCaret = roomData.clients[msg.editorId].cursor['caret']; 
+        roomData.clients = msg.clients;
 
         for (const [key, value] of Object.entries(msg.texts)) {
             lineDiv = document.getElementById(key);
@@ -263,9 +267,6 @@ class TexteditorManager {
         //move ONLY client-editor's cursor position
         if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
             const cCursor = roomData.clients[msg.editorId].cursor;
-            const oldCaret = cCursor['caret']; 
-            cCursor['line'] = msg.curLine;
-            cCursor['caret'] = msg.caret;
             this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1, 1);
             this.moveAffectedCursors(roomData, msg, oldCaret, cCursor, lineDiv);
         }
@@ -286,7 +287,6 @@ class TexteditorManager {
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1, 0);
                     //letter increment
                     } else {
-                        console.log('KENA AFFECTED INCREMENT');
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1, 0);
                     }
 
@@ -424,7 +424,8 @@ class TexteditorManager {
             'lastLine' : lastLine,
             'maxLine' : maxLine,
             'caret' : caret,
-            'line_order' : Array.prototype.indexOf.call(this.parent.children, child)
+            'line_order' : Array.prototype.indexOf.call(this.parent.children, child),
+            'editorId' : JSON.parse(document.cookie)['clientId']
         };
         this.clientWs.sendPayload(payload);
     }
@@ -438,7 +439,7 @@ class TexteditorManager {
             'line' : line,
             'caret' : caret,
             'status' : status,
-            'moveAffected' : moveAffected
+            'moveAffected' : moveAffectedCursor
         };
         this.clientWs.sendPayload(payload);
     }

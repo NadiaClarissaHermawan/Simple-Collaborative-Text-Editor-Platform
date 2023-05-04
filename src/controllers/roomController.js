@@ -179,6 +179,8 @@ export default class RoomController {
                             text : value.toString()
                         };
                     }
+                    updatedData.clients[msg.editorId].cursor['caret'] = msg.caret;
+                    updatedData.clients[msg.editorId].cursor['line'] = msg.curLine;
                     updatedTexts = msg.texts;
                 }
                 return { 

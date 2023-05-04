@@ -99,9 +99,7 @@ export default class ServerWsController {
     //on message 'updateText' handler
     updateTextHandler = async (msg) => {
         //TODO:hapus ini nanti
-        console.log('ServerWSController updateTextHandler');
-        console.log('old texts: ', msg.oldtexts);
-        console.log('new texts: ', msg.texts);
+        console.log('\nServerWSController updateTextHandler');
         console.log('all msg', JSON.stringify(msg));
         let result = null;
         while (result == null) {
@@ -120,7 +118,8 @@ export default class ServerWsController {
             'lastLine' : result.lastLine,
             'caret' : msg.caret,
             'editorId' : this.clientId, 
-            'maxLine' : result.roomData.maxLine
+            'maxLine' : result.roomData.maxLine,
+            'clients' : result.roomData.clients
         };
         this.broadcast(payload, result.roomData.clients, true, this.clientId);
     }
