@@ -234,6 +234,7 @@ export default class RoomController {
                 roomData.lines[msg.curLine].text = servertext.substring(0, idx);
                 idx2 = idx + 1;
             }
+            roomData.clients[msg.editorId].cursor['caret'] = roomData.lines[msg.curLine].text.length;
             //buntut string
             if (idx2 < servertextlength) { roomData.lines[msg.curLine].text += servertext.substring(idx2); }
             updatedTexts[msg.curLine] = roomData.lines[msg.curLine].text;
