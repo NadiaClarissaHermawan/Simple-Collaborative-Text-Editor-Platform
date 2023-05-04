@@ -12,7 +12,8 @@ export default class RoomController {
             _id : roomId,
             maxLine : 1,
             clients : {},
-            lines : { '1' : { text : '' } }
+            lines : { '1' : { text : '' } },
+            lines_order : [1]
         };
         try {
             await Room.create(roomData);
@@ -148,6 +149,8 @@ export default class RoomController {
     //updateText
     updateTextDataRedis = async (msg, roomId) => {
         let updatedData = null;
+        let updatedTexts = {};
+        let curLine = parseInt(msg.curLine), lastLine = parseInt(msg.lastLine);
         try {
             return await Redis.executeIsolated(async isolatedClient => {
                 await isolatedClient.watch(roomId);
@@ -157,23 +160,33 @@ export default class RoomController {
                 console.log('msg',msg);
                 console.log('updatedData',updatedData);
                 if (!claims) {
-                    console.log('claims salah');
-                    updatedData = this.mergeData(msg, updatedData);
-                    console.log('updatedData', updatedData);
+                    console.log('CLAIMS SALAH');
+                    let mergeResult = this.mergeData(msg, updatedData);
+                    updatedData = mergeResult.roomData;
+                    updatedTexts = mergeResult.updatedTexts;
+                    curLine = parseInt(Object.keys(updatedTexts)[0]);
+                    lastLine = parseInt(updatedData.lines_order[updatedData.lines_order.indexOf(parseInt(curLine)) - 1]);
+                    if (lastLine == NaN) { lastLine = undefined; }
                 } else {
-                    console.log('claims benar');
+                    console.log('CLAIMS BENAR\n');
                     updatedData.maxLine = msg.maxLine;
                     //kalau line id blm ada di urutan kemunculan baris
-                    if (updatedData.lines_order[msg.line_order] !== msg.curLine) {
-                        updatedData.lines_order.splice(msg.line_order, 0, msg.curLine);
+                    if (!updatedData.lines_order.includes(parseInt(msg.curLine))) {
+                        updatedData.lines_order.splice(msg.line_order, 0, parseInt(msg.curLine));
                     }
                     for (const [key, value] of Object.entries(msg.texts)) {
                         updatedData.lines[key] = {
                             text : value.toString()
                         };
                     }
+                    updatedTexts = msg.texts;
                 }
-                return this.transactionToRedis(roomId, updatedData, isolatedClient);
+                return { 
+                    roomData : await this.transactionToRedis(roomId, updatedData, isolatedClient),
+                    updatedTexts : updatedTexts,
+                    curLine : curLine,
+                    lastLine : lastLine
+                };
             });
         } catch (err) {
             //transaction aborted
@@ -201,6 +214,7 @@ export default class RoomController {
     mergeData = (msg, roomData) => {
         const oldtexts = msg.oldtexts;
         const newtexts = msg.texts;
+        let updatedTexts = {};
 
         //same line
         if (Object.keys(oldtexts).length == 1) {
@@ -220,6 +234,7 @@ export default class RoomController {
             }
             //buntut string
             if (idx2 < servertextlength) { roomData.lines[msg.curLine].text += servertext.substring(idx2); }
+            updatedTexts[msg.curLine] = roomData.lines[msg.curLine].text;
 
         //new line
         } else {
@@ -229,20 +244,25 @@ export default class RoomController {
                 roomData.maxLine += 1;
                 lineid = roomData.maxLine;
             } 
-            let lineorder = roomData.lines_order.indexOf(msg.lastLine);
+            let lineorder = roomData.lines_order.indexOf(parseInt(msg.lastLine));
             roomData.lines[lineid] = { text : '' }
 
             //front line-space
-            if (Object.values(newtexts)[0] == '') {
+            if (Object.values(newtexts)[0] == '' && Object.values(newtexts)[1] != '') {
                 console.log('FRONT LINE-SPACE');
-                roomData.lines_order.splice(lineorder, 0, lineid);
+                roomData.lines_order.splice(lineorder, 0, parseInt(lineid));
             //end/mid line-space
             } else {
-                console.log('END/MID LINE-SPACE');
-                roomData.lines_order.splice(lineorder + 1, 0, lineid);    
+                console.log('END/MID LINE-SPACE', msg.lastLine, lineorder);
+                roomData.lines_order.splice(lineorder + 1, 0, parseInt(lineid));    
             } 
+            //TODO:buat kondisi untuk mid line-space yg motong text dari idx 0 - length dari newtext baris pertama dan baris berikutnya berisi   
+            updatedTexts[lineid] = roomData.lines[lineid].text;
         } 
-        return roomData;
+        return {
+            roomData : roomData,
+            updatedTexts : updatedTexts
+        };
     }
 
 

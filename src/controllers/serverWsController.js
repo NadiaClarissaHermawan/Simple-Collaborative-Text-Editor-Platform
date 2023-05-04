@@ -89,7 +89,8 @@ export default class ServerWsController {
         const payload = {
             'method' : 'updateCursor',
             'cursorId' : msg.cursorId,
-            'clientCursor' : roomData.clients[msg.cursorId].cursor
+            'clientCursor' : roomData.clients[msg.cursorId].cursor,
+            'moveAffected' : msg.moveAffected
         };
         this.broadcast(payload, roomData.clients, true, msg.cursorId);
     }
@@ -102,22 +103,26 @@ export default class ServerWsController {
         console.log('old texts: ', msg.oldtexts);
         console.log('new texts: ', msg.texts);
         console.log('all msg', JSON.stringify(msg));
-        let roomData = null;
-        while (roomData == null) {
-            roomData = await this.roomController.updateTextDataRedis(msg, this.roomId);
+        let result = null;
+        while (result == null) {
+            result = await this.roomController.updateTextDataRedis(msg, this.roomId);
         }
-        this.roomController.updateMongo(roomData, 'lines');
+        this.roomController.updateMongo(result.roomData, 'lines');
+        
+        console.log('updated texts', result.updatedTexts);
+        console.log('updated data', result.roomData);
+        console.log('curline, lastline: ', result.curLine, result.lastLine);
         const payload = {
             'method' : 'updateText',
             'oldtexts' : msg.oldtexts,
-            'texts' : msg.texts,
-            'curLine' : msg.curLine,
-            'lastLine' : msg.lastLine,
+            'texts' : result.updatedTexts,
+            'curLine' : result.curLine,
+            'lastLine' : result.lastLine,
             'caret' : msg.caret,
             'editorId' : this.clientId, 
-            'maxLine' : roomData.maxLine
+            'maxLine' : result.roomData.maxLine
         };
-        this.broadcast(payload, roomData.clients, true, this.clientId);
+        this.broadcast(payload, result.roomData.clients, true, this.clientId);
     }
 
 
