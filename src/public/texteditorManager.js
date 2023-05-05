@@ -74,12 +74,8 @@ class TexteditorManager {
             const lineDiv = document.createElement('div');
             const linePre = document.createElement('pre');
             linePre.textContent = textValue;
-
-            console.log('createline\ncurLine:', curLineId, 'lastLineId:', lastLineId);
-
             //dibawahnya
             if (where == 1) {
-                console.log('dibawah');
                 lineDiv.id = curLineId;
                 lineDiv.classList.add('line');
                 lineDiv.appendChild(linePre);
@@ -87,12 +83,10 @@ class TexteditorManager {
                 lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling);
             //diatasnya
             } else {
-                console.log('diatas');
                 lineDiv.id = lastLineId;
                 lineDiv.classList.add('line');
                 lineDiv.appendChild(linePre);
                 lastLineDiv = document.getElementById(curLineId);
-                console.log('lastlinediv', lastLineDiv);
                 lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv);
             }  
         }
@@ -358,7 +352,6 @@ class TexteditorManager {
 
             //awal line
             if (cCursor['caret'] == 0) {
-                console.log('AWAL');
                 texts[this.curRoom.room.maxLine] = '';
                 texts[editedLine] = oldtexts[editedLine];
                 textarea.value = oldtexts[editedLine];
@@ -367,7 +360,6 @@ class TexteditorManager {
                 curLine = editedLine;
             //akhir line
             } else if (cCursor['caret'] == textarea.value.length) {
-                console.log('AKHIR');
                 texts[this.curRoom.room.maxLine] = '';
                 texts[editedLine] = oldtexts[editedLine];
                 textarea.value = "";
@@ -441,7 +433,6 @@ class TexteditorManager {
     notifyTextUpdate = (oldtexts, texts, lastLine, curLine, maxLine, caret, where) => {
         let child = document.getElementById(curLine);
         if (where == 0) { child = document.getElementById(lastLine); }
-        console.log('send to server, curline:', curLine, 'lastline:', lastLine);
         const payload = {
             'method' : 'updateText',
             'oldtexts' : oldtexts,
