@@ -33,7 +33,7 @@ export default class ServerWs {
 
         ws.on(WS_EVENT_MESSAGE, (data, isBinary) => {
             if (this.serverWsHandler === null) {
-                this.serverWsHandler = new ServerWsController(this.clients);
+                this.serverWsHandler = new ServerWsController(this.clients, this);
             }
 
             msg = isBinary ? data : JSON.parse(data.toString());
@@ -69,5 +69,17 @@ export default class ServerWs {
     //on close handler
     clientDisconnected = (clientId, roomId) => {
         this.serverWsHandler.disconnect(clientId, roomId);
+    }
+
+    
+    // send response to client
+    broadcast = (payload, target, self, editorId) => {
+        for (const [key, value] of Object.entries(target)) {
+            if (!self && key == editorId) {
+                continue;
+            } else if (this.clients[key] !== undefined) {
+                this.clients[key].connection.send(JSON.stringify(payload));
+            }
+        }
     }
 }

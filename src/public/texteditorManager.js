@@ -142,7 +142,6 @@ class TexteditorManager {
         this.updateCursor(msg.cursorId);
         if (JSON.parse(document.cookie)['clientId'] === msg.cursorId) {
             this.updateTextareaCaret(document.getElementById(msg.clientCursor['line']).children[0].textContent, msg.clientCursor['caret']);
-            
         }
     }
 

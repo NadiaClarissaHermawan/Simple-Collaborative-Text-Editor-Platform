@@ -37,7 +37,9 @@ class MainManager {
             }
             this.clientWs.sendPayload(payload);
         } else {
-            alert('Room code is missing!');
+            if (inputRoomId == '') {
+                alert('Room code is missing!');
+            }
         }
     }
 

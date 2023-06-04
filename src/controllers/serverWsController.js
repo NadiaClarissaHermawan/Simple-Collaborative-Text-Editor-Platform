@@ -2,10 +2,11 @@ import mongoose from 'mongoose';
 import RoomController from './roomController.js';
 
 export default class ServerWsController {
-    constructor (clients) {
+    constructor (clients, serverWs) {
         this.clients = clients;
         this.clientId = null;
         this.roomId = null;
+        this.serverWs = serverWs;
         this.roomController = new RoomController();
     }
 
@@ -73,7 +74,7 @@ export default class ServerWsController {
                 this.clients[this.clientId].connection.send(JSON.stringify(payload));
                 
                 payload['client_status'] = 1;
-                this.broadcast(payload, roomData.clients, false, this.clientId);
+                this.serverWs.broadcast(payload, roomData.clients, false, this.clientId);
             }
         });
     }
@@ -92,7 +93,7 @@ export default class ServerWsController {
             'clientCursor' : roomData.clients[msg.cursorId].cursor,
             'moveAffected' : msg.moveAffected
         };
-        this.broadcast(payload, roomData.clients, true, msg.cursorId);
+        this.serverWs.broadcast(payload, roomData.clients, true, msg.cursorId);
     }
 
 
@@ -122,7 +123,7 @@ export default class ServerWsController {
             'clients' : result.roomData.clients,
             'where' : msg.where
         };
-        this.broadcast(payload, result.roomData.clients, true, this.clientId);
+        this.serverWs.broadcast(payload, result.roomData.clients, true, this.clientId);
     }
 
 
@@ -142,21 +143,9 @@ export default class ServerWsController {
                 'clientId' : clientId,
                 'room' : roomData
             };
-            this.broadcast(payload, roomData.clients, true, clientId);   
+            this.serverWs.broadcast(payload, roomData.clients, true, clientId);   
         }
         //delete innactive client's connection
         delete this.clients[clientId];
-    }
-
-
-    //broadcast
-    broadcast = (payload, target, self, editorId) => {
-        for (const [key, value] of Object.entries(target)) {
-            if (!self && key == editorId) {
-                continue;
-            } else if (this.clients[key] !== undefined) {
-                this.clients[key].connection.send(JSON.stringify(payload));
-            }
-        }
     }
 }
