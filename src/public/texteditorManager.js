@@ -361,7 +361,6 @@ class TexteditorManager {
 
         // remove existing line
         } else if (event.key === 'Backspace' && cCursor['caret'] == 0 && !this.bsCheck) {
-            console.log(cCursor['caret']);
             let prevDiv = document.getElementById(cCursor['line']).previousElementSibling;
             if (prevDiv != undefined) {
                 this.backspaceHandler(cCursor['line'], prevDiv.id);

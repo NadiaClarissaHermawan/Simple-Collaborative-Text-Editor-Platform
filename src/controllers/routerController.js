@@ -1,9 +1,3 @@
-// import ClientWsController from "./clientWsController.js";
-// let clientWsController = null;
-// if (clientWsController == null) {
-//     clientWsController = new ClientWsController();
-// }
-
 //controller untuk berganti laman
 //Home Page
 export const Home = (req, res) => {
@@ -18,14 +12,3 @@ export const TextEditor = (req, res) => {
         title : 'editor'  
     });
 }
-
-//send create button request to client backend
-// export const CreateRoom = (req, res) => {
-//     clientWsController.setCurRoomId(req.body['roomId']);
-//     const payload = {
-//         'method' : 'join',
-//         'name' : req.body['name'],
-//         'roomId' : req.body['roomId']
-//     };
-//     res.json(payload);
-// }
