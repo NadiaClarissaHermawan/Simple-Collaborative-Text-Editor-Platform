@@ -173,7 +173,7 @@ class TexteditorManager {
                 caret = clickedElement.textContent.length;
             }
         } 
-        this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1, 0);
+        this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1);
     }
 
 
@@ -277,7 +277,7 @@ class TexteditorManager {
         if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
             document.getElementById('textarea').value = text;
             const cCursor = roomData.clients[msg.editorId].cursor;
-            this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1, 1);
+            this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1);
             this.moveAffectedCursors(roomData, msg, oldCaret, cCursor, lineDiv);
         }
     }
@@ -294,16 +294,16 @@ class TexteditorManager {
                 (value.cursor['caret'] >= oldCaret)) {
                     //backspace
                     if (cCursor['caret'] < oldCaret) {
-                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1, 0);
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1);
                     //letter increment
                     } else {
-                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1, 0);
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
                     }
 
                 //new line
                 } else if (value.cursor['line'] == msg.lastLine && 
                 msg.lastLine != msg.curLine && value.cursor['caret'] >= oldCaret) {
-                    this.notifyCursorUpdate(key, msg.curLine, (value.cursor['caret'] - oldCaret), 1, 0);
+                    this.notifyCursorUpdate(key, msg.curLine, (value.cursor['caret'] - oldCaret), 1);
 
                 //affected line below
                 } else {
@@ -311,7 +311,7 @@ class TexteditorManager {
                     const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
                     const editorElementIdx = Array.prototype.indexOf.call(container.children, lineDiv);
                     if (clientElementIdx > editorElementIdx) {
-                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1, 0);
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1);
                     }
                 }
             } 
@@ -371,19 +371,23 @@ class TexteditorManager {
             }
             this.createNewLine(lastLine, curLine, textarea.value, where);
             setTimeout(this.notifyTextUpdate(oldtexts, texts, lastLine, curLine, this.curRoom.room.maxLine, 0, where), 10000);
-            
+
         //uppercase /symbols
         } else if (event.key === 'CapsLock' || event.key === 'Shift'){
             event.preventDefault();
 
-        //left
-        } else if (event.key === 'ArrowLeft') {
+        //left or leftmost backspace
+        } else if (event.key === 'ArrowLeft' || 
+        (event.key === 'Backspace' && cCursor['caret'] == 0)) {
             if (cCursor['caret'] > 0) {
-                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']-1, 1, 0);
+                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']-1, 1);
             } else {
                 let prevDiv = document.getElementById(cCursor['line']).previousElementSibling;
                 if (prevDiv != undefined) {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevDiv.children[0].textContent.length, 1, 0);
+                    // if (event.key === 'Backspace') {
+                    //     this.removeLine(cCursor['line'], prevDiv.id);
+                    // } 
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevDiv.children[0].textContent.length, 1);
                 } 
             }
         
@@ -391,11 +395,11 @@ class TexteditorManager {
         } else if (event.key === 'ArrowRight') {
             const len = document.getElementById(cCursor['line']).children[0].textContent.length;
             if (cCursor['caret'] < len) {
-                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']+1, 1, 0);
+                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']+1, 1);
             } else {
                 let nextDiv = document.getElementById(cCursor['line']).nextElementSibling;
                 if (nextDiv != undefined) {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, 0, 1, 0);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, 0, 1);
                 }
             }
 
@@ -406,9 +410,9 @@ class TexteditorManager {
                 const prevDiv = document.getElementById(cCursor['line']).previousSibling;
                 const prevLen = prevDiv.children[0].textContent.length;
                 if (cCursor['caret'] > prevLen) { 
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevLen, 1, 0);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevLen, 1);
                 } else {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, cCursor['caret'], 1, 0);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, cCursor['caret'], 1);
                 }
             }
             
@@ -419,12 +423,24 @@ class TexteditorManager {
                 const nextDiv = document.getElementById(cCursor['line']).nextSibling;
                 const nextLen = nextDiv.children[0].textContent.length;
                 if (cCursor['caret'] > nextLen) { 
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, nextLen, 1, 0);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, nextLen, 1);
                 } else {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, cCursor['caret'], 1, 0);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, cCursor['caret'], 1);
                 }
             }
         } 
+    }
+
+
+    //remove existing line
+    removeLine = (lineId, prevLineId) => {
+        let lineElement = document.getElementById(lineId);
+        let str = lineElement.children[0].textContent;
+        if (str.length > 0) {
+            //TODO: tambah teks sisa ke elemen prevLine
+        }
+        document.getElementById(lineId).remove();
+        //TODO: atur perubahan ke Redis Mongo
     }
 
 
@@ -449,14 +465,13 @@ class TexteditorManager {
 
 
     //notify server over a changed cursor position
-    notifyCursorUpdate = (cursorId, line, caret, status, moveAffectedCursor) => {
+    notifyCursorUpdate = (cursorId, line, caret, status) => {
         const payload = {
             'method' : 'updateCursor',
             'cursorId' : cursorId,
             'line' : line,
             'caret' : caret,
-            'status' : status,
-            'moveAffected' : moveAffectedCursor
+            'status' : status
         };
         this.clientWs.sendPayload(payload);
     }

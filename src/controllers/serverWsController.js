@@ -90,8 +90,7 @@ export default class ServerWsController {
         const payload = {
             'method' : 'updateCursor',
             'cursorId' : msg.cursorId,
-            'clientCursor' : roomData.clients[msg.cursorId].cursor,
-            'moveAffected' : msg.moveAffected
+            'clientCursor' : roomData.clients[msg.cursorId].cursor
         };
         this.serverWs.broadcast(payload, roomData.clients, true, msg.cursorId);
     }
