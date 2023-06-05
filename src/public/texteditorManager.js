@@ -361,10 +361,13 @@ class TexteditorManager {
 
         // remove existing line
         } else if (event.key === 'Backspace' && cCursor['caret'] == 0 && !this.bsCheck) {
-            let prevDiv = document.getElementById(cCursor['line']).previousElementSibling;
-            if (prevDiv != undefined) {
-                this.backspaceHandler(cCursor['line'], prevDiv.id);
-            } 
+            let curDiv = document.getElementById(cCursor['line']);
+            if (curDiv != undefined) {
+                let prevDiv = curDiv.previousElementSibling;
+                if (prevDiv != undefined) {
+                    this.backspaceHandler(cCursor['line'], prevDiv.id);
+                } 
+            }
 
         // uppercase /symbols
         } else if (event.key === 'CapsLock' || event.key === 'Shift'){
