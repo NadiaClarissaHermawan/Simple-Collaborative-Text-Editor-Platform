@@ -9,6 +9,7 @@ class TexteditorManager {
         this.letterWidth = 0.0;
         this.parent = null;
         this.interval = null;
+        this.bsCheck = false;
         this.initialize();
     }
 
@@ -200,7 +201,7 @@ class TexteditorManager {
             else { visible = false; }
 
             if (cursorId == JSON.parse(document.cookie)['clientId']) {
-                //kedap kedip cursor
+                // kedap kedip cursor
                 if (this.interval == null && visible) {
                     this.interval = setInterval(this.cursorInterval, 500);
                 } else if (this.interval != null && !visible) {
@@ -229,7 +230,7 @@ class TexteditorManager {
 
     //update textarea selection range (caret)
     updateTextareaCaret = (text, caret) => {
-        //move focus to textarea 
+        // move focus to textarea 
         const textarea = document.getElementById('textarea');
         textarea.value = text;
         textarea.setSelectionRange(caret, caret);
@@ -237,7 +238,7 @@ class TexteditorManager {
     }
 
 
-    //remove disconnected client's cursor
+    // remove disconnected client's cursor
     removeCursor = (cursorId) => {
         const cursor = document.getElementById(cursorId);
         cursor.remove();
@@ -256,11 +257,18 @@ class TexteditorManager {
 
         for (const [key, value] of Object.entries(msg.texts)) {
             lineDiv = document.getElementById(key);
-            text = value;
+            if (value != null) {
+                text = value;
+            }
 
             //new line
             if (lineDiv == null) {
                 this.createNewLine(msg.lastLine, msg.curLine, text, msg.where);
+            
+            //line deletion
+            } else if (value == null) {
+                this.removeLine(msg.lastLine);
+
             //receive changes on existing line & make it visible
             } else {
                 let textElement = lineDiv.children[0];
@@ -273,7 +281,7 @@ class TexteditorManager {
             }
         }
 
-        //move ONLY client-editor's cursor position
+        // move ONLY client-editor's cursor position
         if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
             document.getElementById('textarea').value = text;
             const cCursor = roomData.clients[msg.editorId].cursor;
@@ -283,29 +291,34 @@ class TexteditorManager {
     }
 
 
-    //move affected cursors
+    // move affected cursors
     moveAffectedCursors = (roomData, msg, oldCaret, cCursor, lineDiv) => {
-        //check & move affected cursors
+        // check & move affected cursors
         const container = document.getElementById('text-presentation');
         for (const [key, value] of Object.entries(roomData.clients)) {
+
             if (key != msg.editorId && value.cursor['status'] == 1) {
                 //same line after 'enter' OR common same line 
                 if (msg.lastLine == msg.curLine && value.cursor['line'] == cCursor['line'] && 
                 (value.cursor['caret'] >= oldCaret)) {
-                    //backspace
+                    // backspace
                     if (cCursor['caret'] < oldCaret) {
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1);
-                    //letter increment
+                    // letter increment
                     } else {
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
                     }
 
-                //new line
+                // used to be in the same line 
                 } else if (value.cursor['line'] == msg.lastLine && 
                 msg.lastLine != msg.curLine && value.cursor['caret'] >= oldCaret) {
-                    this.notifyCursorUpdate(key, msg.curLine, (value.cursor['caret'] - oldCaret), 1);
+                    let crt =  (value.cursor['caret'] - oldCaret);
+                    if (msg.texts[msg.lastLine] == null) {
+                        crt = cCursor['caret'] + value.cursor['caret'];
+                    } 
+                    this.notifyCursorUpdate(key, msg.curLine, crt, 1);
 
-                //affected line below
+                // affected line below
                 } else {
                     const clientElement = document.getElementById(value.cursor['line']);
                     const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
@@ -322,6 +335,7 @@ class TexteditorManager {
     // Oninput : update textarea content 
     // note : kenapa gapake onkeyup? kalo keynya dipress dia garealtime jatohnya 
     receiveInputText = (event) => {
+        this.bsCheck = true;
         let texts = {}, oldtexts = {};
         const textarea = event.target;
         //no line enter
@@ -335,63 +349,40 @@ class TexteditorManager {
     }
 
 
-    //accept input from clients
+    // accept input from clients
     receiveInputKey = (event) => {
         const textarea = document.getElementById('textarea');
         const cCursor = this.curRoom.room.clients[JSON.parse(document.cookie)['clientId']].cursor;
         const editedLine = cCursor['line'];
 
-        //adding new line div
+        // adding new line div
         if (event.key === 'Enter') {
-            let texts = {}, oldtexts = {}, where = 1;
-            this.curRoom.room.maxLine += 1;
-            let lastLine = editedLine, curLine = this.curRoom.room.maxLine;
-            oldtexts[editedLine] = document.getElementById(cCursor['line']).children[0].textContent;
-            oldtexts[this.curRoom.room.maxLine] = null;
+            this.enterHandler(textarea, cCursor, editedLine);
 
-            //awal line
-            if (cCursor['caret'] == 0) {
-                texts[this.curRoom.room.maxLine] = '';
-                texts[editedLine] = oldtexts[editedLine];
-                textarea.value = oldtexts[editedLine];
-                where = 0; 
-                lastLine = this.curRoom.room.maxLine;
-                curLine = editedLine;
-            //akhir line
-            } else if (cCursor['caret'] == textarea.value.length) {
-                texts[this.curRoom.room.maxLine] = '';
-                texts[editedLine] = oldtexts[editedLine];
-                textarea.value = "";
-            //mid line
-            } else {
-                console.log('MID');
-                texts[editedLine] = textarea.value.substring(0, cCursor['caret']);
-                textarea.value = textarea.value.substring(cCursor['caret'] + 1);
-                texts[this.curRoom.room.maxLine] = textarea.value;
-            }
-            this.createNewLine(lastLine, curLine, textarea.value, where);
-            setTimeout(this.notifyTextUpdate(oldtexts, texts, lastLine, curLine, this.curRoom.room.maxLine, 0, where), 10000);
+        // remove existing line
+        } else if (event.key === 'Backspace' && cCursor['caret'] == 0 && !this.bsCheck) {
+            console.log(cCursor['caret']);
+            let prevDiv = document.getElementById(cCursor['line']).previousElementSibling;
+            if (prevDiv != undefined) {
+                this.backspaceHandler(cCursor['line'], prevDiv.id);
+            } 
 
-        //uppercase /symbols
+        // uppercase /symbols
         } else if (event.key === 'CapsLock' || event.key === 'Shift'){
             event.preventDefault();
 
-        //left or leftmost backspace
-        } else if (event.key === 'ArrowLeft' || 
-        (event.key === 'Backspace' && cCursor['caret'] == 0)) {
+        // left 
+        } else if (event.key === 'ArrowLeft') {
             if (cCursor['caret'] > 0) {
                 this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']-1, 1);
             } else {
                 let prevDiv = document.getElementById(cCursor['line']).previousElementSibling;
                 if (prevDiv != undefined) {
-                    // if (event.key === 'Backspace') {
-                    //     this.removeLine(cCursor['line'], prevDiv.id);
-                    // } 
                     this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevDiv.children[0].textContent.length, 1);
                 } 
             }
         
-        //right
+        // right
         } else if (event.key === 'ArrowRight') {
             const len = document.getElementById(cCursor['line']).children[0].textContent.length;
             if (cCursor['caret'] < len) {
@@ -403,10 +394,10 @@ class TexteditorManager {
                 }
             }
 
-        //up
+        // up
         } else if (event.key === 'ArrowUp') {
             const topDivId = document.getElementById('text-presentation').children[0].id;
-            if (cCursor['line'] !== topDivId) {
+            if (cCursor['line'] != topDivId) {
                 const prevDiv = document.getElementById(cCursor['line']).previousSibling;
                 const prevLen = prevDiv.children[0].textContent.length;
                 if (cCursor['caret'] > prevLen) { 
@@ -416,10 +407,10 @@ class TexteditorManager {
                 }
             }
             
-        //down
+        // down
         } else if (event.key === 'ArrowDown') {
             const bottomDivElement = document.getElementById('text-presentation').lastElementChild;
-            if (cCursor['line'] !== bottomDivElement.id) {
+            if (cCursor['line'] != bottomDivElement.id) {
                 const nextDiv = document.getElementById(cCursor['line']).nextSibling;
                 const nextLen = nextDiv.children[0].textContent.length;
                 if (cCursor['caret'] > nextLen) { 
@@ -429,18 +420,64 @@ class TexteditorManager {
                 }
             }
         } 
+        this.bsCheck = false;
     }
 
 
-    //remove existing line
-    removeLine = (lineId, prevLineId) => {
+    // enter button handler
+    enterHandler = (textarea, cCursor, editedLine) => {
+        let texts = {}, oldtexts = {}, where = 1;
+        this.curRoom.room.maxLine += 1;
+        let lastLine = editedLine, curLine = this.curRoom.room.maxLine;
+        oldtexts[editedLine] = document.getElementById(cCursor['line']).children[0].textContent;
+        oldtexts[this.curRoom.room.maxLine] = null;
+
+        //awal line
+        if (cCursor['caret'] == 0) {
+            texts[this.curRoom.room.maxLine] = '';
+            texts[editedLine] = oldtexts[editedLine];
+            textarea.value = oldtexts[editedLine];
+            where = 0; 
+            lastLine = this.curRoom.room.maxLine;
+            curLine = editedLine;
+        //akhir line
+        } else if (cCursor['caret'] == textarea.value.length) {
+            texts[this.curRoom.room.maxLine] = '';
+            texts[editedLine] = oldtexts[editedLine];
+            textarea.value = "";
+        //mid line
+        } else {
+            texts[editedLine] = textarea.value.substring(0, cCursor['caret']);
+            textarea.value = textarea.value.substring(cCursor['caret'] + 1);
+            texts[this.curRoom.room.maxLine] = textarea.value;
+        }
+        this.createNewLine(lastLine, curLine, textarea.value, where);
+        setTimeout(this.notifyTextUpdate(oldtexts, texts, lastLine, curLine, this.curRoom.room.maxLine, 0, where), 10000);
+    }
+    
+
+    // backspace button handler
+    backspaceHandler = (lineId, prevLineId) => {
         let lineElement = document.getElementById(lineId);
         let str = lineElement.children[0].textContent;
+        let prevLineElement = document.getElementById(prevLineId);
+
+        let texts = {}, oldtexts = {}, where = 1;
+        oldtexts[prevLineId] = prevLineElement.children[0].textContent;
+        oldtexts[lineId] = str;
+        texts[prevLineId] = oldtexts[prevLineId];
+        texts[lineId] = null;
+
         if (str.length > 0) {
-            //TODO: tambah teks sisa ke elemen prevLine
+            texts[prevLineId] += str; 
         }
+        setTimeout(this.notifyTextUpdate(oldtexts, texts, lineId, prevLineId, this.curRoom.room.maxLine, oldtexts[prevLineId].length, where), 10000);
+    }
+
+
+    //remove existing line 
+    removeLine = (lineId) => {
         document.getElementById(lineId).remove();
-        //TODO: atur perubahan ke Redis Mongo
     }
 
 

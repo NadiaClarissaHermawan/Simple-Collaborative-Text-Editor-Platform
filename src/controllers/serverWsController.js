@@ -99,7 +99,7 @@ export default class ServerWsController {
     //on message 'updateText' handler
     updateTextHandler = async (msg) => {
         //TODO:hapus ini nanti
-        console.log('\nServerWSController updateTextHandler');
+        console.log('\nServerWSController: updateTextHandler');
         console.log('all msg', JSON.stringify(msg));
         let result = null;
         while (result == null) {

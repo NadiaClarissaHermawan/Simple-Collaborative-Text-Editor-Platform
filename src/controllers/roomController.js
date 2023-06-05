@@ -160,7 +160,7 @@ export default class RoomController {
                 console.log('msg',msg);
                 console.log('baseData',updatedData);
                 if (!claims) {
-                    console.log('\nCLAIMS SALAH');
+                    console.log('\nCLAIMS SALAH---------------------------');
                     let mergeResult = this.mergeData(msg, updatedData);
                     updatedData = mergeResult.roomData;
                     updatedTexts = mergeResult.updatedTexts;
@@ -174,13 +174,9 @@ export default class RoomController {
                             lastLine = parseInt(Object.keys(updatedTexts)[0]);
                         }
                     }
-                    // curLine = parseInt(Object.keys(updatedTexts)[0]);
-                    // let indexOrder = updatedData.lines_order.indexOf(parseInt(curLine)) - 1;
-                    // if (indexOrder < 0) { indexOrder = 0; }
-                    // lastLine = parseInt(updatedData.lines_order[indexOrder]);
 
                 } else {
-                    console.log('\nCLAIMS BENAR');
+                    console.log('\nCLAIMS BENAR---------------------------');
                     updatedData.maxLine = msg.maxLine;
                     let newLine = msg.curLine;
                     if (msg.where == 0) {
@@ -191,9 +187,14 @@ export default class RoomController {
                         updatedData.lines_order.splice(msg.line_order, 0, parseInt(newLine));
                     }
                     for (const [key, value] of Object.entries(msg.texts)) {
-                        updatedData.lines[key] = {
-                            text : value.toString()
-                        };
+                        if (value == null) {
+                            delete updatedData.lines[key];
+                            updatedData.lines_order.splice(msg.line_order + 1, 1);
+                        } else {
+                            updatedData.lines[key] = {
+                                text : value.toString()
+                            };
+                        }
                     }
                     updatedData.clients[msg.editorId].cursor['caret'] = msg.caret;
                     updatedData.clients[msg.editorId].cursor['line'] = curLine;

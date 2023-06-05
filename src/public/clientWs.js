@@ -50,9 +50,6 @@ class ClientWs {
             'clientId' : msg.clientId
         }
         document.cookie = JSON.stringify(obj);
-
-        //retrieve cookie value example
-        console.log('client id set successfully ' + JSON.parse(document.cookie)['clientId']);
     }
 
 
