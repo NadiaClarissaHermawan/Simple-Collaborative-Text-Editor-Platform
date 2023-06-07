@@ -107,9 +107,9 @@ export default class ServerWsController {
         }
         this.roomController.updateMongo(result.roomData, 'lines');
         
-        console.log('updated texts', result.updatedTexts);
-        console.log('updated data', result.roomData);
-        console.log('curline, lastline: ', result.curLine, result.lastLine);
+        console.log('merge results:', result.updatedTexts);
+        // console.log('updated data', result.roomData);
+        // console.log('curline, lastline: ', result.curLine, result.lastLine);
         const payload = {
             'method' : 'updateText',
             'oldtexts' : msg.oldtexts,

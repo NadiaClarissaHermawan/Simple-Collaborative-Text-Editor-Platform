@@ -139,8 +139,10 @@ class TexteditorManager {
 
 
     cursorPageUpdate = (msg) => {
-        this.curRoom.room.clients[msg.cursorId].cursor = msg.clientCursor;
+        let editorCursor = msg.clientCursor;
+        this.curRoom.room.clients[msg.cursorId].cursor = editorCursor;
         this.updateCursor(msg.cursorId);
+        
         if (JSON.parse(document.cookie)['clientId'] === msg.cursorId) {
             this.updateTextareaCaret(document.getElementById(msg.clientCursor['line']).children[0].textContent, msg.clientCursor['caret']);
         }
@@ -251,9 +253,11 @@ class TexteditorManager {
         const roomData = this.curRoom.room;
         roomData.maxLine = msg.maxLine;
         
-        // const cCursor = roomData.clients[msg.editorId].cursor;
-        const oldCaret = roomData.clients[msg.editorId].cursor['caret']; 
+        const editorCursor = roomData.clients[msg.editorId].cursor;
+        const oldCaret = editorCursor['caret']; 
         roomData.clients = msg.clients;
+
+        const curClientCursor = roomData.clients[JSON.parse(document.cookie)['clientId']].cursor;
 
         for (const [key, value] of Object.entries(msg.texts)) {
             lineDiv = document.getElementById(key);
@@ -279,11 +283,19 @@ class TexteditorManager {
                     this.countLetterWidth(textElement); 
                 }
             }
+
+            //update textarea content if current client's cursor line == editor's cursor line
+            if (curClientCursor['line'] == key && value != null) {
+                let newCaretIncr = (text.length - document.getElementById('textarea').value.length);
+                if (newCaretIncr < 0) { newCaretIncr *= -1;}
+
+                this.updateTextareaCaret(text, curClientCursor['caret'] + newCaretIncr);
+            }
         }
 
         // move ONLY client-editor's cursor position
         if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
-            document.getElementById('textarea').value = text;
+            // document.getElementById('textarea').value = text;
             const cCursor = roomData.clients[msg.editorId].cursor;
             this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1);
             this.moveAffectedCursors(roomData, msg, oldCaret, cCursor, lineDiv);
