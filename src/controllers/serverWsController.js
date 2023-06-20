@@ -98,7 +98,6 @@ export default class ServerWsController {
 
     //on message 'updateText' handler
     updateTextHandler = async (msg) => {
-        //TODO:hapus ini nanti
         console.log('\nServerWSController: updateTextHandler');
         console.log('all msg', JSON.stringify(msg));
         let result = null;
@@ -108,15 +107,13 @@ export default class ServerWsController {
         this.roomController.updateMongo(result.roomData, 'lines');
         
         console.log('merge results:', result.updatedTexts);
-        // console.log('updated data', result.roomData);
-        // console.log('curline, lastline: ', result.curLine, result.lastLine);
         const payload = {
             'method' : 'updateText',
             'oldtexts' : msg.oldtexts,
             'texts' : result.updatedTexts,
             'curLine' : result.curLine,
             'lastLine' : result.lastLine,
-            'caret' : msg.caret,
+            'caret' : result.mergeIndex,
             'editorId' : this.clientId, 
             'maxLine' : result.roomData.maxLine,
             'clients' : result.roomData.clients,

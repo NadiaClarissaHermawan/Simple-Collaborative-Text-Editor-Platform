@@ -4,7 +4,7 @@ const WS_EVENT_OPEN = 'open';
 class ClientWs {
     constructor (portNumber, pageManager, texteditorManager) {
         //TODO:kalo pas hosting, localhost ganti jadi ip address dari si hostnya (tp ws:// hrs ttep ada)
-        this.ws = new WebSocket('ws://10.100.77.39:' + portNumber);
+        this.ws = new WebSocket('ws://192.168.6.28:' + portNumber);
         this.pageManager = pageManager;
         this.texteditorManager = null;
         this.initialize();
@@ -60,13 +60,11 @@ class ClientWs {
             'roomId' : msg.roomId
         };
         this.sendPayload(payload);
-
-        // contoh kirim fetch api
-        // this.sendRequest('/createroom', METHOD_POST, msg, this.sendPayload);
     }
 
 
     sendPayload = (payload) => {
+        console.log('tester payload:', payload);
         //wait until client ws connected to server ws
         if (this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(payload));

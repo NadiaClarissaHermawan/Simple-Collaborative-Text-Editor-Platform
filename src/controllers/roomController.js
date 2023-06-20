@@ -129,12 +129,36 @@ export default class RoomController {
         try {
             return await Redis.executeIsolated(async isolatedClient => {
                 await isolatedClient.watch(roomId);
-
                 updatedData = JSON.parse(await isolatedClient.get(roomId));
                 let udClientCursor = updatedData.clients[msg.cursorId].cursor;
-                udClientCursor['line'] = msg.line;
-                udClientCursor['caret'] = msg.caret;
                 udClientCursor['status'] = msg.status;
+
+                //tidak butuh penyesuaian dgn posisi terakhir (click event/arrow) & enter line
+                if (msg.affectedCursor == 0 || msg.affectedCursor == 2) {
+                    udClientCursor['line'] = msg.line;
+                    udClientCursor['caret'] = msg.caret;
+                } else {
+                    const lineData = updatedData.lines[msg.line];
+                    if (lineData == undefined) {  
+                        udClientCursor['line'] = updatedData.lines_order[updatedData.lines_order.length - 1];
+                        lineData = updatedData.lines[udClientCursor['line']];
+                    } else {
+                        udClientCursor['line'] = msg.line;
+                    }
+    
+                    const lineText = lineData.text;
+                    if (msg.caret > lineText.length) {
+                        udClientCursor['caret'] = lineText.length;
+                    } else {
+                        //geser kanan
+                        if (msg.oldCaret < msg.caret && udClientCursor['caret'] < msg.caret) {
+                            udClientCursor['caret'] += (msg.caret - udClientCursor['caret']);
+                        //geser kiri
+                        } else if (msg.oldCaret > msg.caret && udClientCursor['caret'] > msg.caret) {
+                            udClientCursor['caret'] --;
+                        } 
+                    }
+                }
                 return this.transactionToRedis(roomId, updatedData, isolatedClient);
             });
         } catch (err) {
@@ -150,6 +174,7 @@ export default class RoomController {
     updateTextDataRedis = async (msg, roomId) => {
         let updatedData = null;
         let updatedTexts = {};
+        let mergeIndex = null;
         let curLine = parseInt(msg.curLine), lastLine = parseInt(msg.lastLine);
         try {
             return await Redis.executeIsolated(async isolatedClient => {
@@ -162,6 +187,7 @@ export default class RoomController {
                 if (!claims) {
                     console.log('\nCLAIMS SALAH---------------------------');
                     let mergeResult = this.mergeData(msg, updatedData);
+                    mergeIndex = mergeResult.mergeIndex;
                     updatedData = mergeResult.roomData;
                     updatedTexts = mergeResult.updatedTexts;
 
@@ -199,12 +225,14 @@ export default class RoomController {
                     updatedData.clients[msg.editorId].cursor['caret'] = msg.caret;
                     updatedData.clients[msg.editorId].cursor['line'] = curLine;
                     updatedTexts = msg.texts;
+                    mergeIndex = msg.caret;
                 }
                 return { 
                     roomData : await this.transactionToRedis(roomId, updatedData, isolatedClient),
                     updatedTexts : updatedTexts,
                     curLine : curLine,
-                    lastLine : lastLine
+                    lastLine : lastLine,
+                    mergeIndex : mergeIndex
                 };
             });
         } catch (err) {
@@ -233,25 +261,37 @@ export default class RoomController {
     mergeData = (msg, roomData) => {
         const oldtexts = msg.oldtexts;
         const newtexts = msg.texts;
+        let mergeIndex = null;
         let updatedTexts = {};
 
         //same line
         if (Object.keys(oldtexts).length == 1) {
             let idx = msg.caret - 1, idx2 = null;
+            if (msg.caret == 0) { idx = msg.caret; }
+
             let servertext = roomData.lines[Object.keys(oldtexts)[0]].text;
             let servertextlength = servertext.length;
 
             if (msg.caret > servertextlength) { idx = servertextlength; }
             //letter increment
             if (Object.values(oldtexts)[0].length < Object.values(newtexts)[0].length) {
-                roomData.lines[msg.curLine].text = servertext.substring(0, idx) + Object.values(newtexts)[0].substring(msg.caret - 1, msg.caret);
+                idx = msg.caret - (Object.values(newtexts)[0].length - Object.values(oldtexts)[0].length);
+                if (idx > servertextlength) {
+                    idx = servertextlength;
+                }
                 idx2 = idx;
+                roomData.lines[msg.curLine].text = servertext.substring(0, idx) + Object.values(newtexts)[0].substring(idx, msg.caret);
+                mergeIndex = roomData.lines[msg.curLine].text.length;
             //letter decrement
             } else {
+                idx = msg.caret;
                 roomData.lines[msg.curLine].text = servertext.substring(0, idx);
-                idx2 = idx + 1;
+                
+                let selisih = Object.values(oldtexts)[0].length - Object.values(newtexts)[0].length;
+                idx2 = idx + selisih;
+                mergeIndex = idx;
             }
-            roomData.clients[msg.editorId].cursor['caret'] = roomData.lines[msg.curLine].text.length;
+            roomData.clients[msg.editorId].cursor['caret'] = mergeIndex;
             //buntut string
             if (idx2 < servertextlength) { roomData.lines[msg.curLine].text += servertext.substring(idx2); }
             updatedTexts[msg.curLine] = roomData.lines[msg.curLine].text;
@@ -287,16 +327,25 @@ export default class RoomController {
         } 
         return {
             roomData : roomData,
-            updatedTexts : updatedTexts
+            updatedTexts : updatedTexts, 
+            mergeIndex : mergeIndex
         };
     }
 
 
     //update Room data at MongoDB
     updateMongo = (roomData, mark) => {
-        roomData = Room.hydrate(roomData);
-        roomData.markModified(mark);
-        roomData.save();
+        Room.findOneAndUpdate({'_id':roomData._id}, {
+            "$set": {
+                "clients" : roomData.clients,
+                "lines" : roomData.lines,
+                "lines_order" : roomData.lines_order
+            }
+        }).exec();
+
+        // roomData = Room.hydrate(roomData);
+        // roomData.markModified(mark);
+        // roomData.save();
     }
 
 

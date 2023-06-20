@@ -68,8 +68,9 @@ class TexteditorManager {
 
     //create new line div
     createNewLine = (lastLineId, curLineId, textValue, where) => {
-        if (lastLineId === undefined) {
-            document.getElementById(curLineId).children[0].textContent = textValue;
+        const curLineElement = document.getElementById(curLineId);
+        if (lastLineId === undefined && curLineElement != undefined) {
+            curLineElement.children[0].textContent = textValue;
         } else {
             let lastLineDiv = null;
             const lineDiv = document.createElement('div');
@@ -80,8 +81,14 @@ class TexteditorManager {
                 lineDiv.id = curLineId;
                 lineDiv.classList.add('line');
                 lineDiv.appendChild(linePre);
-                lastLineDiv = document.getElementById(lastLineId);
-                lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling);
+                if (lastLineId != undefined) {
+                    lastLineDiv = document.getElementById(lastLineId);
+                    lastLineDiv.parentNode.insertBefore(lineDiv, lastLineDiv.nextSibling);
+                //first element
+                } else {
+                    this.parent.appendChild(lineDiv);
+                }
+
             //diatasnya
             } else {
                 lineDiv.id = lastLineId;
@@ -176,7 +183,7 @@ class TexteditorManager {
                 caret = clickedElement.textContent.length;
             }
         } 
-        this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1);
+        this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], line, caret, 1, null, null, 0);
     }
 
 
@@ -258,6 +265,7 @@ class TexteditorManager {
         roomData.clients = msg.clients;
 
         const curClientCursor = roomData.clients[JSON.parse(document.cookie)['clientId']].cursor;
+        let targetCaret = curClientCursor['caret'];
 
         for (const [key, value] of Object.entries(msg.texts)) {
             lineDiv = document.getElementById(key);
@@ -265,14 +273,12 @@ class TexteditorManager {
                 text = value;
             }
 
-            //new line
-            if (lineDiv == null) {
-                this.createNewLine(msg.lastLine, msg.curLine, text, msg.where);
-            
             //line deletion
-            } else if (value == null) {
+            if (value == null) {
                 this.removeLine(msg.lastLine);
-
+            //new line
+            } else if (lineDiv == null) {
+                this.createNewLine(msg.lastLine, msg.curLine, text, msg.where);
             //receive changes on existing line & make it visible
             } else {
                 let textElement = lineDiv.children[0];
@@ -285,21 +291,29 @@ class TexteditorManager {
             }
 
             //update textarea content if current client's cursor line == editor's cursor line
-            if (curClientCursor['line'] == key && value != null) {
-                let newCaretIncr = (text.length - document.getElementById('textarea').value.length);
-                if (newCaretIncr < 0) { newCaretIncr *= -1;}
+            if (curClientCursor['line'] == key && value != null && msg.editorId != JSON.parse(document.cookie)['clientId']) {
+                const textarea = document.getElementById('textarea');
 
-                this.updateTextareaCaret(text, curClientCursor['caret'] + newCaretIncr);
+                //corner case kalo index cursor sdh mentok biar ga membal ke kanan lg
+                if (msg.caret == 0 && (curClientCursor['caret'] == 0 || curClientCursor['caret'] == 1)) {
+                    targetCaret = 0;
+                //geserin posisi kursor yg ada di sebelah kanan indeks pengeditan
+                } else if (msg.caret <= curClientCursor['caret']) {
+                    let newCaretIncr = (text.length - textarea.value.length);
+                    if (newCaretIncr < 0) { newCaretIncr *= -1;}
+                    targetCaret += newCaretIncr;
+                } 
+                curClientCursor['caret'] = targetCaret;
+                this.updateTextareaCaret(text, targetCaret);
             }
         }
 
         // move ONLY client-editor's cursor position
         if (msg.editorId === JSON.parse(document.cookie)['clientId']) {
-            // document.getElementById('textarea').value = text;
             const cCursor = roomData.clients[msg.editorId].cursor;
-            this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1);
+            this.notifyCursorUpdate(msg.editorId, cCursor['line'], cCursor['caret'], 1, editorCursor['line'], editorCursor['caret'], 1);
             this.moveAffectedCursors(roomData, msg, oldCaret, cCursor, lineDiv);
-        }
+        } 
     }
 
 
@@ -310,15 +324,15 @@ class TexteditorManager {
         for (const [key, value] of Object.entries(roomData.clients)) {
 
             if (key != msg.editorId && value.cursor['status'] == 1) {
-                //same line after 'enter' OR common same line 
+                //same line 
                 if (msg.lastLine == msg.curLine && value.cursor['line'] == cCursor['line'] && 
                 (value.cursor['caret'] >= oldCaret)) {
                     // backspace
                     if (cCursor['caret'] < oldCaret) {
-                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1);
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1, value.cursor['line'], value.cursor['caret'], 1);
                     // letter increment
-                    } else {
-                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1);
+                    } else if (cCursor['caret'] > oldCaret) {
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']+1, 1, value.cursor['line'], value.cursor['caret'], 1);
                     }
 
                 // used to be in the same line 
@@ -328,7 +342,7 @@ class TexteditorManager {
                     if (msg.texts[msg.lastLine] == null) {
                         crt = cCursor['caret'] + value.cursor['caret'];
                     } 
-                    this.notifyCursorUpdate(key, msg.curLine, crt, 1);
+                    this.notifyCursorUpdate(key, msg.curLine, crt, 1, value.cursor['line'], value.cursor['caret'], 2);
 
                 // affected line below
                 } else {
@@ -336,7 +350,7 @@ class TexteditorManager {
                     const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
                     const editorElementIdx = Array.prototype.indexOf.call(container.children, lineDiv);
                     if (clientElementIdx > editorElementIdx) {
-                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1);
+                        this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1, value.cursor['line'], value.cursor['caret'], 1);
                     }
                 }
             } 
@@ -388,11 +402,11 @@ class TexteditorManager {
         // left 
         } else if (event.key === 'ArrowLeft') {
             if (cCursor['caret'] > 0) {
-                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']-1, 1);
+                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']-1, 1, cCursor['line'], cCursor['caret'], 0);
             } else {
                 let prevDiv = document.getElementById(cCursor['line']).previousElementSibling;
                 if (prevDiv != undefined) {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevDiv.children[0].textContent.length, 1);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevDiv.children[0].textContent.length, 1, cCursor['line'], cCursor['caret'], 0);
                 } 
             }
         
@@ -400,11 +414,11 @@ class TexteditorManager {
         } else if (event.key === 'ArrowRight') {
             const len = document.getElementById(cCursor['line']).children[0].textContent.length;
             if (cCursor['caret'] < len) {
-                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']+1, 1);
+                this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], cCursor['line'], cCursor['caret']+1, 1,  cCursor['line'], cCursor['caret'], 0);
             } else {
                 let nextDiv = document.getElementById(cCursor['line']).nextElementSibling;
                 if (nextDiv != undefined) {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, 0, 1);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, 0, 1,  cCursor['line'], cCursor['caret'], 0);
                 }
             }
 
@@ -415,9 +429,9 @@ class TexteditorManager {
                 const prevDiv = document.getElementById(cCursor['line']).previousSibling;
                 const prevLen = prevDiv.children[0].textContent.length;
                 if (cCursor['caret'] > prevLen) { 
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevLen, 1);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, prevLen, 1, cCursor['line'], cCursor['caret'], 0);
                 } else {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, cCursor['caret'], 1);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], prevDiv.id, cCursor['caret'], 1, cCursor['line'], cCursor['caret'], 0);
                 }
             }
             
@@ -428,9 +442,9 @@ class TexteditorManager {
                 const nextDiv = document.getElementById(cCursor['line']).nextSibling;
                 const nextLen = nextDiv.children[0].textContent.length;
                 if (cCursor['caret'] > nextLen) { 
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, nextLen, 1);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, nextLen, 1, cCursor['line'], cCursor['caret'], 0);
                 } else {
-                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, cCursor['caret'], 1);
+                    this.notifyCursorUpdate(JSON.parse(document.cookie)['clientId'], nextDiv.id, cCursor['caret'], 1, cCursor['line'], cCursor['caret'], 0);
                 }
             }
         } 
@@ -516,13 +530,16 @@ class TexteditorManager {
 
 
     //notify server over a changed cursor position
-    notifyCursorUpdate = (cursorId, line, caret, status) => {
+    notifyCursorUpdate = (cursorId, line, caret, status, oldLine, oldCaret, affectedCursor) => {
         const payload = {
             'method' : 'updateCursor',
             'cursorId' : cursorId,
             'line' : line,
             'caret' : caret,
-            'status' : status
+            'status' : status,
+            'oldLine' : oldLine,
+            'oldCaret' : oldCaret,
+            'affectedCursor':affectedCursor
         };
         this.clientWs.sendPayload(payload);
     }
