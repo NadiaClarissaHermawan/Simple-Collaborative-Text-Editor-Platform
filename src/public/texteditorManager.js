@@ -78,6 +78,7 @@ class TexteditorManager {
             linePre.textContent = textValue;
             //dibawahnya
             if (where == 1) {
+                console.log('bawah');
                 lineDiv.id = curLineId;
                 lineDiv.classList.add('line');
                 lineDiv.appendChild(linePre);
@@ -91,6 +92,7 @@ class TexteditorManager {
 
             //diatasnya
             } else {
+                console.log('atas');
                 lineDiv.id = lastLineId;
                 lineDiv.classList.add('line');
                 lineDiv.appendChild(linePre);
@@ -297,7 +299,7 @@ class TexteditorManager {
                 //corner case kalo index cursor sdh mentok biar ga membal ke kanan lg
                 if (msg.caret == 0 && (curClientCursor['caret'] == 0 || curClientCursor['caret'] == 1)) {
                     targetCaret = 0;
-                //geserin posisi kursor yg ada di sebelah kanan indeks pengeditan
+                //geserin posisi kursor client penerima msg yg ada di sebelah kanan indeks pengeditan
                 } else if (msg.caret <= curClientCursor['caret']) {
                     let newCaretIncr = (text.length - textarea.value.length);
                     if (newCaretIncr < 0) { newCaretIncr *= -1;}
@@ -327,6 +329,9 @@ class TexteditorManager {
                 //same line 
                 if (msg.lastLine == msg.curLine && value.cursor['line'] == cCursor['line'] && 
                 (value.cursor['caret'] >= oldCaret)) {
+                    console.log('cursorId:', key);
+                    console.log('same line');
+
                     // backspace
                     if (cCursor['caret'] < oldCaret) {
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret']-1, 1, value.cursor['line'], value.cursor['caret'], 1);
@@ -338,6 +343,8 @@ class TexteditorManager {
                 // used to be in the same line 
                 } else if (value.cursor['line'] == msg.lastLine && 
                 msg.lastLine != msg.curLine && value.cursor['caret'] >= oldCaret) {
+                    console.log('cursorId:', key);
+                    console.log('used to be in the same line');
                     let crt =  (value.cursor['caret'] - oldCaret);
                     if (msg.texts[msg.lastLine] == null) {
                         crt = cCursor['caret'] + value.cursor['caret'];
@@ -350,6 +357,8 @@ class TexteditorManager {
                     const clientElementIdx = Array.prototype.indexOf.call(container.children, clientElement);
                     const editorElementIdx = Array.prototype.indexOf.call(container.children, lineDiv);
                     if (clientElementIdx > editorElementIdx) {
+                        console.log('cursorId:', key);
+                        console.log('affected line below');
                         this.notifyCursorUpdate(key, value.cursor['line'], value.cursor['caret'], 1, value.cursor['line'], value.cursor['caret'], 1);
                     }
                 }
@@ -479,7 +488,7 @@ class TexteditorManager {
             textarea.value = textarea.value.substring(cCursor['caret'] + 1);
             texts[this.curRoom.room.maxLine] = textarea.value;
         }
-        this.createNewLine(lastLine, curLine, textarea.value, where);
+        // this.createNewLine(lastLine, curLine, textarea.value, where);
         setTimeout(this.notifyTextUpdate(oldtexts, texts, lastLine, curLine, this.curRoom.room.maxLine, 0, where), 10000);
     }
     

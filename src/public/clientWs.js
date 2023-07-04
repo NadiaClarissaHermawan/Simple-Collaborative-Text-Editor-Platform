@@ -4,7 +4,7 @@ const WS_EVENT_OPEN = 'open';
 class ClientWs {
     constructor (portNumber, pageManager, texteditorManager) {
         //TODO:kalo pas hosting, localhost ganti jadi ip address dari si hostnya (tp ws:// hrs ttep ada)
-        this.ws = new WebSocket('ws://192.168.6.28:' + portNumber);
+        this.ws = new WebSocket('ws://192.168.100.8:' + portNumber);
         this.pageManager = pageManager;
         this.texteditorManager = null;
         this.initialize();
@@ -64,7 +64,7 @@ class ClientWs {
 
 
     sendPayload = (payload) => {
-        console.log('tester payload:', payload);
+        // console.log('tester payload:', payload);
         //wait until client ws connected to server ws
         if (this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(payload));
