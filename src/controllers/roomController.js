@@ -61,7 +61,7 @@ export default class RoomController {
     }
 
 
-    //get existing room data from Redis TODO: lakukan get dari isolatedClient
+    //get existing room data from Redis 
     getRoomFromRedis = (roomId) => {
         let roomData = Redis.get(roomId);
         return roomData;

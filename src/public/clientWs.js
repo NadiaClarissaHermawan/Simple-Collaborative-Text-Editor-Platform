@@ -3,8 +3,7 @@ const WS_EVENT_OPEN = 'open';
 
 class ClientWs {
     constructor (portNumber, pageManager, texteditorManager) {
-        //TODO:kalo pas hosting, localhost ganti jadi ip address dari si hostnya (tp ws:// hrs ttep ada)
-        this.ws = new WebSocket('ws://192.168.100.8:' + portNumber);
+        this.ws = new WebSocket('ws://' + hostAddress + ':' + portNumber);
         this.pageManager = pageManager;
         this.texteditorManager = null;
         this.initialize();
