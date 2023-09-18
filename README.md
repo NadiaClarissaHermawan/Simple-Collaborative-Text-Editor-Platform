@@ -1,4 +1,4 @@
-# Skripsi 
+# Simple Collaborative Text Editor Platform
 
 ## Made By: 
 - Nadia Clarissa Hermawan
@@ -15,12 +15,12 @@
 - Data storage: MongoDB v6.0.4 and Redis v7.0.10
 
 ## Server-side Precondition:
-- Make sure that the host's device already got Redis and MongoDB services running.
+- Make sure that the host's device already has Redis and MongoDB services running.
 
 ## How to run Server-side Service:
 1. Go to 'src\public\' dir, then open 'config.js'.
 2. Replace the existing host IP address with your host's IP address.
-3. Go to 'src' dir, then open command prompt.
+3. Go to 'src' dir, then open the command prompt.
 4. Type 'npm start' without any quotation mark.
 
 ## How to stop Server-side Service:
